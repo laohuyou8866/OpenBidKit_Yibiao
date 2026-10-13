@@ -1,6 +1,5 @@
-export type TextModelProvider = 'official' | 'jinlong' | 'volcengine' | 'deepseek' | 'agnes' | 'custom';
+export type TextModelProvider = 'volcengine' | 'deepseek' | 'agnes' | 'custom';
 export type AiRequestMode = 'normal' | 'stream';
-export type UpdateChannel = 'github' | 'cloudflare' | 'atomgit';
 
 export interface TextModelConfig {
   api_key: string;
@@ -43,7 +42,7 @@ export interface ImageModelTestResult {
   mime_type?: string;
 }
 
-export type ImageModelProvider = 'jinlong' | 'volcengine' | 'google-ai-studio' | 'agnes' | 'custom' | 'comfyui';
+export type ImageModelProvider = 'volcengine' | 'google-ai-studio' | 'agnes' | 'custom' | 'comfyui';
 export type ImageModelStatus = 'untested' | 'available' | 'unavailable';
 export type ImageModelSize = 'auto' | '512' | '1K' | '2K' | '3K' | '4K' | '1024x768' | '1024x1024' | '768x1024' | '1536x1024' | '1024x1536' | '2048x2048' | '2048x1152' | '3840x2160' | '2160x3840';
 export type ImageModelRatio = '1:1' | '3:4' | '4:3' | '16:9' | '9:16' | '2:3' | '3:2' | '21:9';
@@ -79,12 +78,10 @@ export interface ComponentsConfig {
 }
 
 export interface ClientConfig extends AiConfig {
-  official_api_model_type: 'cost-effective' | 'high-quality';
   image_model: ImageModelConfig;
   image_model_profiles: ImageModelProfiles;
   components: ComponentsConfig;
   agent_auto_answer_enabled?: boolean;
-  update_channel?: UpdateChannel;
   gpu_hardware_acceleration_enabled?: boolean;
   gpu_hardware_acceleration_configured?: boolean;
   export_format?: import('./exportFormat').ExportFormatConfig;
@@ -94,6 +91,8 @@ export interface ClientConfig extends AiConfig {
   storage_cleanup_version?: number;
   analytics_client_id?: string;
   analytics_created_at?: string;
+  /** 统一服务地址；为空即纯离线版本，不发起任何在线请求。 */
+  service_base_url?: string;
 }
 
 export type ModelImageInputStatus = 'supported' | 'unsupported' | 'mixed' | 'unknown';

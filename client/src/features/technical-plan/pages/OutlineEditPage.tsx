@@ -252,6 +252,8 @@ function OutlineEditPage({
   const hasOutlineSelection = Boolean(outlineSelection?.items?.length);
   const awaitingOutlineSelection = Boolean(taskRunning && hasOutlineSelection && !outlineSelection?.confirmed);
   const generating = startingOutline || taskRunning;
+  // 中断且会话仍可复用时，允许从上次阶段继续（不重跑已完成阶段）。
+  const resumableOutline = task?.stats?.agent?.resumable === true && !taskRunning;
   const contentMutationLocked = contentTaskStatus === 'running' || contentTaskStatus === 'pausing' || contentTaskStatus === 'paused';
   const outlineMutationLocked = generating || contentMutationLocked || savingSort || aiAdjustmentRunning;
   const progressLogs = task?.logs || [];
@@ -389,6 +391,37 @@ function OutlineEditPage({
       setStartingOutline(false);
       setLocalStartAt(null);
       showToast(error instanceof Error ? error.message : '启动目录生成任务失败', 'error');
+    }
+  };
+
+  // 从中断处继续：复用上次 Agent 会话与已完成阶段，不重置目录与进度。
+  const resumeOutline = async () => {
+    const lockMessage = getMutationLockMessage();
+    if (lockMessage) {
+      throw new Error(lockMessage);
+    }
+
+    try {
+      const startedNow = Date.now();
+      setStartingOutline(true);
+      setLocalStartAt(startedNow);
+      setNowTick(startedNow);
+      await window.yibiao?.tasks.resumeOutlineGeneration();
+      showToast('目录生成已从上次进度继续', 'success');
+    } catch (error) {
+      setStartingOutline(false);
+      setLocalStartAt(null);
+      showToast(error instanceof Error ? error.message : '继续目录生成失败', 'error');
+    }
+  };
+
+  // 暂停当前目录生成：中止本次运行但保留会话与工作区产物，之后用「继续生成」接着跑。
+  const pauseOutline = async () => {
+    try {
+      await window.yibiao?.tasks.pauseOutlineGeneration();
+      showToast('目录生成已暂停，可随时继续', 'info');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '暂停目录生成失败', 'error');
     }
   };
 
@@ -763,6 +796,16 @@ function OutlineEditPage({
           {bidTemplateExists && (
             <button type="button" className="secondary-action" onClick={() => void onOpenBidTemplate?.()}>
               打开投标模版
+            </button>
+          )}
+          {generating && !awaitingOutlineSelection && (
+            <button type="button" className="secondary-action" onClick={() => void pauseOutline()}>
+              暂停
+            </button>
+          )}
+          {resumableOutline && (
+            <button type="button" className="secondary-action" onClick={() => void resumeOutline()} disabled={generating || sorting || contentMutationLocked}>
+              继续生成
             </button>
           )}
           <button type="button" className="primary-action" onClick={() => void generateOutline()} disabled={generating || sorting || contentMutationLocked || !projectOverview || !bidAnalysisReady}>

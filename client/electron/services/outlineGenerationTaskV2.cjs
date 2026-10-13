@@ -1560,14 +1560,19 @@ async function runOutlineGenerationTaskV2({ agentService, ordinaryAgentService, 
   });
   } catch (error) {
     const message = error?.message || String(error);
-    const status = taskControl.signal.aborted || error?.code === 'AGENT_DISCONNECTED'
-      ? 'interrupted'
-      : 'error';
+    // 用户主动暂停与中断都保留会话与工作区产物，标记为可继续；只有真失败才按失败处理。
+    const paused = taskControl.pauseRequested === true;
+    const status = paused
+      ? 'paused'
+      : taskControl.signal.aborted || error?.code === 'AGENT_DISCONNECTED'
+        ? 'interrupted'
+        : 'error';
     try {
       updateAgentState({
         status,
         agent_connection: 'idle',
         error: message,
+        resumable: true,
       });
     } catch {}
     try {
@@ -1577,7 +1582,10 @@ async function runOutlineGenerationTaskV2({ agentService, ordinaryAgentService, 
         error: message,
       });
     } catch {}
-    try { workspaceStore.clearBidTemplate(); } catch {}
+    // 暂停或可继续的中断不清招标模板，否则会丢掉续跑依赖的工作区产物。
+    if (status === 'error') {
+      try { workspaceStore.clearBidTemplate(); } catch {}
+    }
     throw error;
   }
 }

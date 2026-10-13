@@ -1,25 +1,20 @@
-const { clipboard, dialog, ipcMain, powerMonitor, shell } = require('electron');
+const { clipboard, dialog, ipcMain, shell } = require('electron');
 const { registerAgentIpc } = require('./agentIpc.cjs');
 const { registerAiIpc } = require('./aiIpc.cjs');
 const { registerAutoConfirmationIpc } = require('./autoConfirmationIpc.cjs');
 const { registerConfigIpc } = require('./configIpc.cjs');
 const { registerCredentialLibraryIpc } = require('./credentialLibraryIpc.cjs');
 const { registerDeveloperIpc } = require('./developerIpc.cjs');
-const { registerDonationIpc } = require('./donationIpc.cjs');
 const { registerDuplicateCheckIpc } = require('./duplicateCheckIpc.cjs');
 const { registerExportIpc } = require('./exportIpc.cjs');
 const { registerFileIpc } = require('./fileIpc.cjs');
 const { registerKnowledgeBaseIpc } = require('./knowledgeBaseIpc.cjs');
-const { registerLicenseIpc } = require('./licenseIpc.cjs');
-const { registerOfficialAccountIpc, registerOfficialInvoiceIpc } = require('./officialAccountIpc.cjs');
 const { registerRejectionCheckIpc } = require('./rejectionCheckIpc.cjs');
 const { registerTaskIpc } = require('./taskIpc.cjs');
 const { registerTechnicalPlanIpc } = require('./technicalPlanIpc.cjs');
 const { registerFeasibilityReportIpc } = require('./feasibilityReportIpc.cjs');
 const { registerTemplateIpc } = require('./templateIpc.cjs');
 const { registerSystemFontIpc } = require('./systemFontIpc.cjs');
-const { registerPluginIpc } = require('./pluginIpc.cjs');
-const pluginService = require('../services/pluginService.cjs');
 const { createAgentService } = require('../services/agentService.cjs');
 const { createTechnicalPlanExport } = require('../services/technicalPlanExport.cjs');
 const { createAiService } = require('../services/aiService.cjs');
@@ -28,7 +23,6 @@ const { createConfigStore } = require('../services/configStore.cjs');
 const { createCredentialLibraryService } = require('../services/credentialLibraryService.cjs');
 const { createDeveloperExpansionReplaceTestService } = require('../services/developerExpansionReplaceTest.cjs');
 const { createDeveloperLayoutFigureService } = require('../services/developerLayoutFigureService.cjs');
-const { createDonationService } = require('../services/donationService.cjs');
 const { createDuplicateCheckService } = require('../services/duplicateCheckService.cjs');
 const { createDuplicateCheckStore } = require('../services/duplicateCheckStore.cjs');
 const { createCheckResultExportService } = require('../services/checkResultExportService.cjs');
@@ -36,8 +30,6 @@ const { createExportService } = require('../services/exportService.cjs');
 const { createFileService } = require('../services/fileService.cjs');
 const { createKnowledgeBaseService } = require('../services/knowledgeBaseService.cjs');
 const { createKnowledgeBaseStore } = require('../services/knowledgeBaseStore.cjs');
-const { createLicenseService } = require('../services/licenseService.cjs');
-const { createOfficialAccountService } = require('../services/officialAccountService.cjs');
 const { createRejectionCheckStore } = require('../services/rejectionCheckStore.cjs');
 const { createSqliteDatabase } = require('../services/sqliteDatabase.cjs');
 const { createSystemFontService } = require('../services/systemFontService.cjs');
@@ -47,7 +39,6 @@ const { createAgentWorkspaceService } = require('../services/agentWorkspaceServi
 const { createTaskLogStore } = require('../services/taskLogStore.cjs');
 const { createTechnicalPlanStore } = require('../services/technicalPlanStore.cjs');
 const { createFeasibilityReportStore } = require('../services/feasibilityReportStore.cjs');
-const { createOfficialInvoiceStore } = require('../services/officialInvoiceStore.cjs');
 const { createTemplateStore } = require('../services/templateStore.cjs');
 const { checkRequiredOnlineServices, getRequiredOnlineServiceStatus } = require('../services/requiredOnlineServices.cjs');
 const { initLocalImageRenderService } = require('../services/localImageRenderService.cjs');
@@ -135,8 +126,6 @@ const workspaceDatabaseChannels = [
   'credential-library:delete-project',
   'credential-library:save-other-material',
   'credential-library:delete-other-material',
-  'official-account:get-invoice-info',
-  'official-account:save-invoice-info',
   'technical-plan:load-state',
   'technical-plan:load-generation-config',
   'technical-plan:save-generation-config',
@@ -201,6 +190,8 @@ const workspaceDatabaseChannels = [
   'tasks:start-bid-section-extraction',
   'tasks:start-bid-analysis',
   'tasks:start-outline-generation',
+  'tasks:resume-outline-generation',
+  'tasks:pause-outline-generation',
   'tasks:confirm-outline-selection',
   'tasks:suppress-outline-selection-auto-confirmation',
   'tasks:start-global-facts-generation',
@@ -323,44 +314,23 @@ function registerWorkspaceDatabaseServices({ app, configStore, aiService, agentS
   registerDuplicateCheckIpc({ duplicateCheckStore, checkResultExportService });
   registerRejectionCheckIpc({ rejectionCheckStore, taskService, checkResultExportService });
   registerTemplateIpc({ templateStore, openXmlHelperService });
-  registerOfficialInvoiceIpc({ officialInvoiceStore: createOfficialInvoiceStore({ db: sqliteDatabase.db }) });
   registerTaskIpc({ taskService });
   updateStatus({ phase: 'ready', ready: true, message: '本地数据库已就绪' });
   
-  // 更新 pluginService 的服务引用
-  pluginService.updateServices({
-    agentService,
-    taskService,
-    agentWorkspaceService,
-    technicalPlanStore,
-    duplicateCheckStore,
-    rejectionCheckStore,
-  });
   
-  // 在服务就绪后启用已启用的插件
-  pluginService.activateEnabledPlugins().catch((error) => {
-    console.error('[plugin-service] 启用插件失败:', error);
-  });
   
   return { sqliteDatabase, technicalPlanExport: createTechnicalPlanExport({ technicalPlanStore, templateStore, agentService, openXmlHelperService }) };
 }
 
-function registerIpcHandlers({ app, mainWindow, checkAndDownloadUpdate, triggerUpdateDownload, quitAndInstall, getLatestVersion, getUpdateDownloadUrl, gpuStartupState = {}, gpuTrialArg = '--yibiao-trial-hardware-acceleration', forceDisableGpuArgs = [], openDeveloperTokenStatsWindow, closeDeveloperTokenStatsWindow, openDeveloperAgentMonitorWindow, closeDeveloperAgentMonitorWindow }) {
+function registerIpcHandlers({ app, mainWindow, gpuStartupState = {}, gpuTrialArg = '--yibiao-trial-hardware-acceleration', forceDisableGpuArgs = [], openDeveloperTokenStatsWindow, closeDeveloperTokenStatsWindow, openDeveloperAgentMonitorWindow, closeDeveloperAgentMonitorWindow }) {
   void checkRequiredOnlineServices();
   const configStore = createConfigStore(app);
   initLocalImageRenderService({ configStore });
-  const licenseService = createLicenseService({ app, configStore });
-  const officialAccountService = createOfficialAccountService({ app, configStore, powerMonitor });
   const aiService = createAiService({ app, configStore });
   const developerExpansionReplaceTestService = createDeveloperExpansionReplaceTestService({ aiService });
   const developerLayoutFigureService = createDeveloperLayoutFigureService({ app, aiService });
-  const donationService = createDonationService({
-    app,
-    onPrompt: (payload) => sendToWebContents(mainWindow.webContents, 'donation:prompt', payload),
-    onPaid: () => sendToWebContents(mainWindow.webContents, 'donation:paid'),
-  });
   const autoConfirmationService = createAutoConfirmationService({ configStore });
-  const agentService = createAgentService({ app, configStore, aiService, licenseService, autoConfirmationService });
+  const agentService = createAgentService({ app, configStore, aiService, autoConfirmationService });
   const fileService = createFileService({ app, configStore });
   const openXmlHelperService = createOpenXmlHelperService({ app, configStore });
   let technicalPlanExport;
@@ -371,8 +341,6 @@ function registerIpcHandlers({ app, mainWindow, checkAndDownloadUpdate, triggerU
   let gpuTrialRelaunchStarted = false;
 
   const closeServices = async () => {
-    await officialAccountService.close();
-    donationService.close?.();
     await agentService.close?.();
     autoConfirmationService.close?.();
     await openXmlHelperService.close?.();
@@ -457,34 +425,17 @@ function registerIpcHandlers({ app, mainWindow, checkAndDownloadUpdate, triggerU
     developerLayoutFigureService,
     openXmlHelperService,
   });
-  registerDonationIpc({ donationService });
-  registerLicenseIpc({ licenseService });
-  registerOfficialAccountIpc({ officialAccountService });
-  void officialAccountService.start().catch(() => undefined);
   registerAiIpc({ aiService });
   registerAgentIpc({ agentService });
   registerAutoConfirmationIpc({ autoConfirmationService });
   registerFileIpc({ fileService });
-  registerExportIpc({ exportService, donationService });
+  registerExportIpc({ exportService });
   registerSystemFontIpc({ systemFontService });
-  registerPluginIpc(ipcMain, app, {
-    agentService,
-    taskService: null,
-    technicalPlanStore: null,
-    duplicateCheckStore: null,
-    rejectionCheckStore: null,
-  });
   ipcMain.handle('ui:set-current-view', (event, view) => {
     applyUiCurrentView(view, event.sender);
     return { success: true };
   });
   registerPendingWorkspaceDatabaseIpc(databaseStatus.getStatus);
-
-  setTimeout(() => {
-    void licenseService.refreshOnStartup?.().catch((error) => {
-      console.warn('[license] startup refresh failed', error?.message || String(error));
-    });
-  }, 800);
 
   const startWorkspaceDatabase = () => {
     if (workspaceDatabaseStarted) return;
@@ -576,64 +527,6 @@ function registerIpcHandlers({ app, mainWindow, checkAndDownloadUpdate, triggerU
       clipboard.writeText(externalUrl);
       return { success: false, message: '系统无法启动默认浏览器，链接已复制，请手动粘贴到浏览器访问' };
     }
-  });
-
-  ipcMain.handle('app:get-latest-version', () => getLatestVersion({ configStore }));
-  ipcMain.handle('app:get-update-download-url', () => getUpdateDownloadUrl({ configStore }));
-  ipcMain.handle('app:quit-and-install', async () => {
-    await closeServicesBeforeExit();
-    return quitAndInstall({ app });
-  });
-
-  /** 与主程序更新检查并行检查插件，并使用独立事件通知 Renderer。 */
-  const checkPluginUpdates = (webContents) => {
-    void pluginService.checkAvailableUpdates()
-      .then((updates) => {
-        if (updates.length > 0) {
-          sendToWebContents(webContents, 'plugins:updates-available', updates);
-        }
-      })
-      .catch((error) => {
-        console.warn('[plugin-service] 自动检查插件更新失败:', error?.message || String(error));
-      });
-  };
-
-  ipcMain.handle('app:check-update', (event) => {
-    const webContents = event.sender;
-    checkPluginUpdates(webContents);
-    return checkAndDownloadUpdate({
-      app,
-      mainWindow,
-      configStore,
-      onProgress: (percent) => {
-        sendToWebContents(webContents, 'app:update-progress', { percent });
-      },
-      onDownloaded: (version) => {
-        sendToWebContents(webContents, 'app:update-downloaded', { version });
-      },
-      onError: (message) => {
-        sendToWebContents(webContents, 'app:update-error', { message });
-      },
-    });
-  });
-
-  ipcMain.handle('app:start-update', (event) => {
-    const webContents = event.sender;
-    checkPluginUpdates(webContents);
-    return triggerUpdateDownload({
-      app,
-      mainWindow,
-      configStore,
-      onProgress: (percent) => {
-        sendToWebContents(webContents, 'app:update-progress', { percent });
-      },
-      onDownloaded: (version) => {
-        sendToWebContents(webContents, 'app:update-downloaded', { version });
-      },
-      onError: (message) => {
-        sendToWebContents(webContents, 'app:update-error', { message });
-      },
-    });
   });
 
   return {

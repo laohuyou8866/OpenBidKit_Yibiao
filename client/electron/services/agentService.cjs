@@ -4,7 +4,6 @@ const crypto = require('node:crypto');
 const { dialog } = require('electron');
 const { createPiRuntimeService } = require('./pi/piRuntimeService.cjs');
 const { buildPiSelfCheckReportMarkdown } = require('./pi/piSelfCheckService.cjs');
-const { createAgentErrorReporter } = require('./agent/agentErrorReporter.cjs');
 const { resolveAgentAbortReason } = require('./agent/agentInterruption.cjs');
 const { getAiRequestActivity } = require('../utils/aiRequestActivity.cjs');
 const {
@@ -113,17 +112,6 @@ function normalizeRunError(error) {
   return error;
 }
 
-// 读取后台父任务提供的最新诊断上下文，采集失败不影响原始异常上报。
-function resolveUserTaskContext(provider) {
-  if (typeof provider !== 'function') return provider && typeof provider === 'object' ? provider : null;
-  try {
-    const context = provider();
-    return context && typeof context === 'object' ? context : null;
-  } catch (error) {
-    return { capture_error: error?.message || String(error) };
-  }
-}
-
 function normalizeSelfCheckResult(rawResult = {}) {
   return {
     ...rawResult,
@@ -154,8 +142,7 @@ function normalizeSelfCheckResult(rawResult = {}) {
 }
 
 // 协调共享 Pi 运行基础设施，并为每个 Agent 任务创建独立 Runtime/Session。
-function createAgentService({ app, configStore, aiService, licenseService, autoConfirmationService }) {
-  const agentErrorReporter = createAgentErrorReporter({ app, configStore, licenseService });
+function createAgentService({ app, configStore, aiService, autoConfirmationService }) {
   const listeners = new Set();
   const monitorListeners = new Set();
   const questionListeners = new Set();
@@ -586,17 +573,17 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
   }
 
   // 子代理统一限制同时运行数量和每条提示词后的轮数，调用方无需单独配置；主任务直接启动。
-  function startTask(payload = {}, userTaskContextProvider) {
+  function startTask(payload = {}) {
     if (closing) return Promise.reject(new Error('Agent 服务正在关闭'));
     if (payload.signal?.aborted) return Promise.reject(createAbortError(payload.signal));
     const parentActivity = getAiRequestActivity();
-    if (!parentActivity) return launchTask(payload, userTaskContextProvider);
+    if (!parentActivity) return launchTask(payload);
     if (!childPools.has(parentActivity)) childPools.set(parentActivity, { active: 0, waiters: [] });
     const pool = childPools.get(parentActivity);
     return acquireChildSlot(pool, payload.signal).then(() => {
       let launched;
       try {
-        launched = launchTask({ ...payload, max_turns_per_prompt: CHILD_AGENT_MAX_TURNS_PER_PROMPT }, userTaskContextProvider);
+        launched = launchTask({ ...payload, max_turns_per_prompt: CHILD_AGENT_MAX_TURNS_PER_PROMPT });
       } catch (error) {
         releaseChildSlot(pool);
         throw error;
@@ -605,7 +592,7 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
     });
   }
 
-  function launchTask(payload, userTaskContextProvider) {
+  function launchTask(payload) {
     if (closing) return Promise.reject(new Error('Agent 服务正在关闭'));
     if (payload.signal?.aborted) return Promise.reject(createAbortError(payload.signal));
     const taskId = payload.task_id || crypto.randomUUID();
@@ -622,7 +609,6 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
       primaryRequested: payload.primary_session === true,
       primaryRequestSequence: payload.primary_session === true ? ++latestPrimaryRequestSequence : 0,
       payload: { ...payload, task_id: taskId },
-      userTaskContextProvider,
       runtime: null,
       runtimeUnsubscribe: null,
       promise: null,
@@ -654,20 +640,8 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
       .then((rawResult) => normalizeRunResult(rawResult))
       .catch((error) => {
         const normalizedError = normalizeRunError(error);
-        const persistentTask = Boolean(taskKey);
-        // 可恢复子任务由父 Agent 接收错误；运行统计保留，最终失败诊断由父任务上报。
-        const shouldReport = runtimePayload.failure_handled_by_parent !== true
-          && !runtimePayload.signal?.aborted
-          && !['AGENT_DISCONNECTED', 'TASK_CANCELLED'].includes(normalizedError?.code);
-        if (shouldReport) {
-          void agentErrorReporter.reportFailure({
-            payload: runtimePayload,
-            error: normalizedError,
-            userTaskContext: resolveUserTaskContext(userTaskContextProvider),
-          }).finally(() => {
-            if (!persistentTask) void entry.runtime?.deleteTaskArchive?.(taskId);
-          });
-        } else if (!persistentTask) {
+        // 可恢复子任务由父 Agent 接收错误；失败时清理非持久任务的归档。
+        if (!taskKey) {
           void entry.runtime?.deleteTaskArchive?.(taskId);
         }
         throw normalizedError;
@@ -684,7 +658,7 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
   }
 
   function runTask(payload = {}) {
-    return startTask(payload, null);
+    return startTask(payload);
   }
 
   function loadPersistentTask(taskKey) {
@@ -750,8 +724,8 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
     }
   }
 
-  // 为后台父任务绑定最新诊断上下文和统一 AI 队列作用域。
-  function bindTaskContext(userTaskContextProvider, options = {}) {
+  // 为后台父任务绑定统一 AI 队列作用域。
+  function bindTaskContext(options = {}) {
     const queueScopeId = safeText(options.queueScopeId || options.queue_scope_id);
     const signal = options.signal;
     const primarySessionRequested = options.primary_session === true;
@@ -766,7 +740,7 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
           // 子任务可以显式拒绝继承主会话身份，队列和取消作用域仍照常继承。
           primary_session: payload.primary_session ?? primarySessionRequested,
           ...(taskSignal ? { signal: taskSignal } : {}),
-        }, userTaskContextProvider);
+        });
       },
       getStatus,
       hasPersistentTaskSession,
@@ -856,7 +830,6 @@ function createAgentService({ app, configStore, aiService, licenseService, autoC
     primarySessionListeners.clear();
     monitorListeners.clear();
     clearPendingMonitorEvents();
-    agentErrorReporter.close();
     for (const waiter of [...childWaiters]) waiter.reject(new Error('Agent 服务正在关闭'));
 
     const entries = [...activeEntries.values()];

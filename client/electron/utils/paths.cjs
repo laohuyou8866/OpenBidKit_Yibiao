@@ -18,14 +18,6 @@ function getOfficialRechargeQrCachePath(app) {
   return path.join(getUserDataPath(app), 'official_recharge_qr_cache.json');
 }
 
-function getLicenseFilePath(app) {
-  return path.join(getUserDataPath(app), 'license.json');
-}
-
-function getDonationStateFilePath(app) {
-  return path.join(getUserDataPath(app), 'donation_state.json');
-}
-
 function getGpuStartupProbePath(app) {
   return path.join(getUserDataPath(app), 'gpu_startup_probe.json');
 }
@@ -210,14 +202,12 @@ module.exports = {
   getDuplicateCheckDir,
   getConfigFilePath,
   getCredentialLibraryDir,
-  getDonationStateFilePath,
   getGpuStartupProbePath,
   getFeasibilityReportDir,
   getFeasibilityReportSourcesDir,
   getGeneratedImagesDir,
   getImportedImagesDir,
   getKnowledgeBaseDir,
-  getLicenseFilePath,
   getOfficialApiSessionFilePath,
   getOfficialRechargeQrCachePath,
   getOpenXmlHelperDebugExecutablePath,

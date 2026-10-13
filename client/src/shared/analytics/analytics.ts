@@ -1,6 +1,17 @@
 import type { ClientConfig } from '../types/config';
 
-const ANALYTICS_ENDPOINT = 'https://analytics.agnet.top/track';
+// 统一服务地址来自配置（service_base_url）；为空即纯离线版本，不上报任何埋点。
+let serviceBaseUrlPromise: Promise<string> | null = null;
+
+function getServiceBaseUrl(): Promise<string> {
+  if (!serviceBaseUrlPromise) {
+    serviceBaseUrlPromise = Promise.resolve()
+      .then(() => window.yibiao?.config.load())
+      .then((config) => String((config as ClientConfig | null)?.service_base_url || '').trim().replace(/\/+$/, ''))
+      .catch(() => '');
+  }
+  return serviceBaseUrlPromise;
+}
 const PROJECT_NAME = 'yibiao-client';
 const LEGACY_CLIENT_ID_KEY = 'analytics_client_id';
 
@@ -67,7 +78,6 @@ let appOpenTracked = false;
 let lastTrackedPage = '';
 let versionPromise: Promise<string> | null = null;
 let identityPromise: Promise<AnalyticsIdentity> | null = null;
-let licenseSnapshot: { value: AnalyticsLicenseSnapshot; expiresAt: number } | null = null;
 
 function getLegacyClientId() {
   try {
@@ -141,33 +151,14 @@ function getVersion() {
 }
 
 async function getAnalyticsLicenseSnapshot(): Promise<AnalyticsLicenseSnapshot> {
-  const now = Date.now();
-  if (licenseSnapshot && licenseSnapshot.expiresAt > now) {
-    return licenseSnapshot.value;
-  }
-
-  const empty: AnalyticsLicenseSnapshot = {
+  // 授权功能已移除，埋点结构保留这几个字段占位，值恒为空。
+  return {
     licenseStatus: '',
     licensePlan: '',
     licenseExpiresAt: '',
     sourceTrusted: '',
     untrustedReason: '',
   };
-
-  try {
-    const status = await window.yibiao?.license?.getStatus();
-    const value = status ? {
-      licenseStatus: String(status.licenseStatus || status.status || ''),
-      licensePlan: String(status.plan || ''),
-      licenseExpiresAt: String(status.licenseExpiresAt || '').slice(0, 10),
-      sourceTrusted: String(status.sourceTrustedText || (status.sourceTrusted ? 'true' : 'false')),
-      untrustedReason: String(status.untrustedReason || ''),
-    } : empty;
-    licenseSnapshot = { value, expiresAt: now + 60_000 };
-    return value;
-  } catch {
-    return empty;
-  }
 }
 
 function booleanText(value: boolean | undefined) {
@@ -199,8 +190,13 @@ function configUsageValueText(value: unknown) {
 }
 
 function sendAnalytics(event: AnalyticsEvent, page = '', payload: Record<string, unknown> = {}) {
-  void Promise.all([getVersion(), getAnalyticsIdentity(), getAnalyticsLicenseSnapshot()]).then(([version, identity, license]) => {
-    fetch(ANALYTICS_ENDPOINT, {
+  void Promise.all([getVersion(), getAnalyticsIdentity(), getAnalyticsLicenseSnapshot(), getServiceBaseUrl()]).then(([version, identity, license, baseUrl]) => {
+    // 纯离线版本（未配置统一服务地址）不发起任何上报。
+    if (!baseUrl) {
+      return;
+    }
+
+    fetch(`${baseUrl}/track`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,4 +1,3 @@
-const ANALYTICS_ENDPOINT = 'https://analytics.agnet.top/track';
 const ANALYTICS_PROJECT_NAME = 'yibiao-client';
 const PI_RUNTIME_ID = 'pi';
 
@@ -21,7 +20,13 @@ function trackAgentRuntime(app, configStore, status, meta = {}) {
   void Promise.resolve()
     .then(() => {
       const config = configStore.load();
-      return fetch(ANALYTICS_ENDPOINT, {
+      // 统一服务地址为空即纯离线版本，直接跳过上报。
+      const baseUrl = String(config?.service_base_url || '').trim().replace(/\/+$/, '');
+      if (!baseUrl) {
+        return undefined;
+      }
+
+      return fetch(`${baseUrl}/track`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

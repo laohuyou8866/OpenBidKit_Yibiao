@@ -35,10 +35,8 @@ export {
 export { ToastProvider, useToast } from './ToastProvider';
 export type { ToastAction, ToastOptions, ToastType } from './ToastProvider';
 export { githubStarNotice, useNoticeToast } from './useNoticeToast';
-export { default as OfflineLicenseActivationDialog } from './OfflineLicenseActivationDialog';
 export { AiHttpErrorDialogProvider } from './AiHttpErrorDialogProvider';
 export { AgentQuestionDialogProvider, useAutoAnswer } from './AgentQuestionDialogProvider';
-export { DonationPromptProvider } from './DonationPromptProvider';
 export {
   DocumentParseNoticeProvider,
   isLibreOfficeRequiredMessage,

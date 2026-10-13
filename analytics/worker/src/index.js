@@ -8,15 +8,10 @@ import { handleHealth } from './routes/health.js';
 import { handleAdminIpBlocks, handlePublicIpBlocks } from './routes/ipBlocks.js';
 import { handleAdminVersionBlocks } from './routes/versionBlocks.js';
 import { handleLatest } from './routes/latest.js';
-import { handleLicenseActivate, handleLicenseConfig, handleOfflineLicense } from './routes/license.js';
 import { handleAdminModelInfoCache, handleAdminModelInfoOverride, handlePublicModelInfo } from './routes/modelInfo.js';
-import { handleAdminNotice, handlePublicNotice, handlePublicNoticeDelivered } from './routes/notice.js';
 import { handleOverview } from './routes/overview.js';
 import { handleProjects } from './routes/projects.js';
 import { handleRetention } from './routes/retention.js';
-import { handleAdminResources, handlePublicResources, handleResourceImage } from './routes/resources.js';
-import { handleAdminPluginSync, handleAdminPlugins, handlePublicPluginDownload, handlePublicPlugins } from './routes/plugins.js';
-import { handleAdminSystemSettings, handlePublicSystemSettings } from './routes/systemSettings.js';
 import { handleTrack } from './routes/track.js';
 import { handleTraffic } from './routes/traffic.js';
 import { MODEL_INFO_SYNC_CRON } from './constants.js';
@@ -34,31 +29,16 @@ const routes = new Map([
   ['/ip-blocks', handlePublicIpBlocks],
   ['/track', handleTrack],
   ['/agent-errors', handleAgentErrorIngest],
-  ['/license/activate', handleLicenseActivate],
-  ['/notice', handlePublicNotice],
-  ['/notice/delivered', handlePublicNoticeDelivered],
   ['/model-info', handlePublicModelInfo],
-  ['/resources', handlePublicResources],
-  ['/resource-image', handleResourceImage],
-  ['/system-settings', handlePublicSystemSettings],
-  ['/plugins', handlePublicPlugins],
-  ['/plugins/download', handlePublicPluginDownload],
   ['/api/projects', handleProjects],
-  ['/api/notice', handleAdminNotice],
   ['/api/model-info-cache', handleAdminModelInfoCache],
   ['/api/model-info-cache/override', handleAdminModelInfoOverride],
-  ['/api/resources', handleAdminResources],
-  ['/api/plugins', handleAdminPlugins],
-  ['/api/plugins/sync', handleAdminPluginSync],
-  ['/api/system-settings', handleAdminSystemSettings],
   ['/api/overview', handleOverview],
   ['/api/clients', handleClients],
   ['/api/client-detail', handleClientDetail],
   ['/api/ip-stats', handleIpStats],
   ['/api/traffic', handleTraffic],
   ['/api/latest', handleLatest],
-  ['/api/license-config', handleLicenseConfig],
-  ['/api/license/offline', handleOfflineLicense],
   ['/api/retention', handleRetention],
   ['/api/config-usage', handleConfigUsage],
   ['/api/model-usage', handleModelUsage],

@@ -1,7 +1,6 @@
 import type { AiHttpErrorPayload, ChatCompletionRequest, JsonCompletionRequest } from './ai';
-import type { OfficialTransactionsPage, OfficialInvoiceApplicationInput, OfficialInvoiceInfo, OfficialAccountState, OfficialEmailCredentials, OfficialEmailPurpose, OfficialRechargeOption, OfficialRechargeOrder } from './officialAccount';
 import type { DuplicateCheckWorkspacePatch, DuplicateCheckWorkspaceState, FileSelectionResult } from './bid';
-import type { ClientConfig, ConfigSaveResult, ImageModelTestResult, ModelInfoResult, ModelListResult, UpdateChannel } from './config';
+import type { ClientConfig, ConfigSaveResult, ImageModelTestResult, ModelInfoResult, ModelListResult } from './config';
 import type { KnowledgeAnalysisSnapshot, KnowledgeBaseEvent, KnowledgeBaseIndex, KnowledgeBaseIndexMutationResult, KnowledgeBaseMutationResult, KnowledgeBaseSearchRequest, KnowledgeBaseSearchPage, KnowledgeBaseRetryDocumentResult, KnowledgeBaseStartMatchingResult, KnowledgeBaseUploadResult, KnowledgeDocument, KnowledgeFolder, KnowledgeItem } from '../../features/knowledge-base/types';
 import type { RejectionCheckWorkspacePatch, RejectionCheckWorkspaceState, RejectionDocumentRole } from '../../features/rejection-check/types';
 import type { BidAnalysisMode, BidAnalysisTaskState, BidSectionMode, ContentGenerationOptions, ContentGenerationPlanState, ContentGenerationProgressDetail, ContentGenerationRuntimeState, ContentGenerationSectionState, DetectedBidSection, GlobalFactGroupState, SaveOutlineRequest, SaveOutlineSelectionRequest, TechnicalPlanGenerationConfig, TechnicalPlanState, TechnicalPlanStep } from '../../features/technical-plan/types';
@@ -149,48 +148,6 @@ export interface DeveloperExpansionReplaceTestResult {
   nextContent: string;
 }
 
-export interface LatestReleaseInfo {
-  version: string;
-  name: string;
-  body: string;
-  published_at: string;
-  html_url: string;
-  download_url?: string;
-  channel?: UpdateChannel;
-}
-
-export interface UpdateCheckResult {
-  enabled: boolean;
-  updateAvailable: boolean;
-  version?: string;
-  downloaded?: boolean;
-  failed?: boolean;
-  message?: string;
-  channel?: UpdateChannel;
-}
-
-export interface UpdateInstallResult {
-  success: boolean;
-  message?: string;
-}
-
-export interface PluginUpdateInfo {
-  id: string;
-  name: string;
-  installedVersion: string;
-  version: string;
-}
-
-export interface PluginUpdateResult extends PluginUpdateInfo {
-  success: boolean;
-  message?: string;
-}
-
-export interface PluginUpdateAllResult {
-  updates: PluginUpdateInfo[];
-  results: PluginUpdateResult[];
-}
-
 export interface GpuHardwareAccelerationStatus {
   configured: boolean;
   enabled: boolean;
@@ -265,40 +222,6 @@ export interface AgentQuestionAnswerPayload {
 
 export interface AgentQuestionAnswerResult {
   success: boolean;
-}
-
-export type LicenseStatusValue = 'missing' | 'active' | 'expired' | 'invalid' | 'invalidated' | 'machine_mismatch' | 'refresh_failed' | 'debug_disabled';
-
-export interface LicenseRuntimeStatus {
-  status: LicenseStatusValue | string;
-  plan: 'free' | 'personal_premium' | 'enterprise_premium' | string;
-  expiresAt: string;
-  licenseExpiresAt: string;
-  licenseStatus: string;
-  activationMode: 'online' | 'offline' | 'debug_disabled' | string;
-  sourceTrusted: boolean;
-  sourceTrustedText: string;
-  untrustedReason: string;
-  machineFingerprintHash: string;
-  fingerprintVersion: string;
-  buildTrusted: boolean;
-  buildChanged: boolean;
-  buildId: string;
-  keyId: string;
-  lastCheckedAt: string;
-  refreshError?: string;
-  config: {
-    freeLicenseDays: number;
-    expirePopupEnabled: boolean;
-    expirePopupDismissible: boolean;
-  };
-}
-
-export interface LicenseOfflineActivationResult {
-  success: boolean;
-  canceled?: boolean;
-  message: string;
-  status: LicenseRuntimeStatus;
 }
 
 export interface AgentRuntimeStatus {
@@ -515,45 +438,6 @@ export interface AgentSelfCheckReportExportResult {
   message: string;
 }
 
-export interface DonationPaymentConfig {
-  channel: 'xorpay' | 'afdian';
-  xorpay_min_order_amount: string;
-}
-
-export interface DonationCreateRequest {
-  amount: string;
-  nickname?: string;
-  email?: string;
-}
-
-export interface DonationIntent {
-  channel: 'xorpay' | 'afdian';
-  payment_url?: string | null;
-  instructions: string;
-  order_id?: number | null;
-  merchant_order_no?: string | null;
-  amount?: string | null;
-  min_amount?: string | null;
-  status?: string | null;
-  qr?: string | null;
-  qr_image_url?: string | null;
-  expires_in?: number | null;
-}
-
-export interface DonationOrderStatus {
-  merchant_order_no: string;
-  amount: string;
-  channel: 'xorpay' | 'afdian';
-  status: string;
-  paid_at: string | null;
-}
-
-export interface DonationPromptPayload {
-  reason: 'runtime' | 'word-export';
-  accumulatedRuntimeMs: number;
-  wordExportClicks: number;
-}
-
 export interface DeveloperLayoutFigureRequest {
   id: string;
   generation: 'aiImage' | 'mermaid' | 'htmlImage';
@@ -587,24 +471,7 @@ export interface YibiaoBridge {
   requiredOnlineServices: {
     getStatus: () => Promise<RequiredOnlineServicesStatus>;
   };
-  donation: {
-    getConfig: () => Promise<DonationPaymentConfig>;
-    createTip: (request: DonationCreateRequest) => Promise<DonationIntent>;
-    getOrderStatus: (merchantOrderNo: string) => Promise<DonationOrderStatus>;
-    finalizeOrderStatus: (merchantOrderNo: string) => Promise<DonationOrderStatus>;
-    onPrompt: (callback: (payload: DonationPromptPayload) => void) => () => void;
-    onPaid: (callback: () => void) => () => void;
-  };
-  getLatestVersion: () => Promise<LatestReleaseInfo>;
-  getUpdateDownloadUrl: () => Promise<string>;
   openExternal: (url: string) => Promise<{ success: boolean; message?: string }>;
-  checkUpdate: () => Promise<UpdateCheckResult>;
-  startUpdate: () => Promise<UpdateCheckResult>;
-  quitAndInstall: () => Promise<UpdateInstallResult>;
-  onUpdateProgress: (callback: (event: { percent: number }) => void) => () => void;
-  onUpdateDownloaded: (callback: (event: { version: string }) => void) => () => void;
-  onUpdateError: (callback: (event: { message: string }) => void) => () => void;
-  onPluginUpdatesAvailable: (callback: (updates: PluginUpdateInfo[]) => void) => () => void;
   database: {
     getStatus: () => Promise<WorkspaceDatabaseStatus>;
     onStatus: (callback: (status: WorkspaceDatabaseStatus) => void) => () => void;
@@ -619,38 +486,11 @@ export interface YibiaoBridge {
     getModelInfo: (modelName: string) => Promise<ModelInfoResult>;
     openConfigFolder: () => Promise<{ success: boolean; path: string }>;
   };
-  license: {
-    getStatus: () => Promise<LicenseRuntimeStatus>;
-    refresh: () => Promise<LicenseRuntimeStatus>;
-    importOfflineFile: () => Promise<LicenseOfflineActivationResult>;
-    activateOfflineCode: (code: string) => Promise<LicenseOfflineActivationResult>;
-  };
-  officialAccount: {
-    redeemCode: (input: { code: string; requestNo: string }) => Promise<{ redeemedPoint: string }>;
-    createInvoiceApplication: (input: OfficialInvoiceApplicationInput) => Promise<void>;
-    getInvoiceInfo: () => Promise<OfficialInvoiceInfo>;
-    saveInvoiceInfo: (input: OfficialInvoiceInfo) => Promise<void>;
-    getState: () => Promise<OfficialAccountState>;
-    refreshBalance: () => Promise<OfficialAccountState>;
-    getRechargeOptions: () => Promise<OfficialRechargeOption[]>;
-    createRechargeOrder: (input: { optionId: string }) => Promise<OfficialRechargeOrder>;
-    getRechargeOrders: () => Promise<OfficialRechargeOrder[]>;
-    getTransactions: (page: number) => Promise<OfficialTransactionsPage>;
-    getRechargeOrder: (id: string) => Promise<OfficialRechargeOrder>;
-    closeRechargeOrder: (id: string) => Promise<OfficialRechargeOrder>;
-    onRechargeOrderChanged: (callback: (order: OfficialRechargeOrder) => void) => () => void;
-    onStateChanged: (callback: (state: OfficialAccountState) => void) => () => void;
-    sendEmailCode: (input: { email: string; purpose: OfficialEmailPurpose }) => Promise<boolean>;
-    loginWithEmail: (input: OfficialEmailCredentials) => Promise<OfficialAccountState>;
-    bindEmail: (input: OfficialEmailCredentials) => Promise<OfficialAccountState>;
-  };
   ai: {
     chat: (request: ChatCompletionRequest) => Promise<string>;
     requestJson: <TResult = unknown>(request: JsonCompletionRequest) => Promise<TResult>;
     testImageModel: (config: ClientConfig) => Promise<ImageModelTestResult>;
     onHttpError: (callback: (event: AiHttpErrorPayload) => void) => () => void;
-    /** 易标官方 API 返回余额不足时触发，由主窗口统一跳转充值。 */
-    onBalanceInsufficient: (callback: () => void) => () => void;
   };
   autoConfirmation: {
     getState: () => Promise<AutoConfirmationState>;
@@ -816,6 +656,8 @@ export interface YibiaoBridge {
     startBidSectionExtraction: (payload?: unknown) => Promise<unknown>;
     startBidAnalysis: (payload: unknown) => Promise<unknown>;
     startOutlineGeneration: (payload: unknown) => Promise<unknown>;
+    resumeOutlineGeneration: () => Promise<unknown>;
+    pauseOutlineGeneration: () => Promise<unknown>;
     suppressOutlineSelectionAutoConfirmation: (payload: { taskId: string }) => Promise<{ success: boolean }>;
     startGlobalFactsGeneration: (payload: unknown) => Promise<unknown>;
     startContentGeneration: (payload: unknown) => Promise<unknown>;
@@ -841,55 +683,5 @@ export interface YibiaoBridge {
   };
   systemFonts: {
     list: () => Promise<string[]>;
-  };
-  plugins: {
-    getAvailablePlugins: () => Promise<AvailablePlugin[]>;
-    install: (pluginId: string) => Promise<void>;
-    installOffline: () => Promise<OfflinePluginInstallResult>;
-    uninstall: (pluginId: string) => Promise<void>;
-    enable: (pluginId: string) => Promise<void>;
-    disable: (pluginId: string) => Promise<void>;
-    update: (pluginId: string) => Promise<void>;
-    checkUpdates: () => Promise<PluginUpdateInfo[]>;
-    updateAll: () => Promise<PluginUpdateAllResult>;
-    openConfig: (pluginId: string) => Promise<void>;
-    refreshMarket: () => Promise<void>;
-    clearUpdateFailedState: (pluginId: string) => Promise<boolean>;
-    notifyEvent: (pluginId: string, event: string, payload?: unknown) => Promise<void>;
-  };
-}
-
-export type OfflinePluginInstallResult =
-  | { canceled: true }
-  | {
-      canceled: false;
-      id: string;
-      name: string;
-      version: string;
-      previousVersion: string | null;
-      updated: boolean;
-      enabled: boolean;
-    };
-
-export interface AvailablePlugin {
-  id: string;
-  name: string;
-  description: string;
-  version: string;
-  author?: string;
-  repository: string;
-  releaseUrl: string;
-  tags: string[];
-  iconUrl: string;
-  downloadCount: number;
-  installed: boolean;
-  installedVersion?: string;
-  enabled: boolean;
-  hasConfig: boolean;
-  hasUpdate?: boolean;
-  updating?: boolean;
-  updateFailed?: {
-    stage: string;
-    message: string;
   };
 }

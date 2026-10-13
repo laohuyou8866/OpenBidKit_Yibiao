@@ -31,22 +31,15 @@ const AI_REQUEST_TIMEOUT_MS = 600000;
 const MULTIMODAL_IMAGE_MAX_EDGE = 2048;
 const MULTIMODAL_IMAGE_JPEG_QUALITY = 85;
 
-// 金龙中转站废弃模型映射：使用这些模型时自动切换到替代模型
-const JINLONG_DEPRECATED_MODEL_MAP = {
-  'codex-auto-review': 'gpt-5.6-terra',
-  'gpt-5.6-luna': 'gpt-5.6-terra',
-};
 const IMAGE_MODEL_TEST_TIMEOUT_MESSAGE = '生图模型测试超时，请检查 Base URL、API Key 或模型名称';
-const ANALYTICS_ENDPOINT = 'https://analytics.agnet.top/track';
 const ANALYTICS_PROJECT_NAME = 'yibiao-client';
-const MODEL_INFO_ENDPOINT = 'https://analytics.agnet.top/model-info';
+
+// 统一服务地址来自配置（或环境变量 YIBIAO_SERVICE_BASE_URL）；为空表示纯离线版本，在线请求直接跳过。
+function buildServiceEndpoint(config, path) {
+  const baseUrl = String(config?.service_base_url || '').trim().replace(/\/+$/, '');
+  return baseUrl ? `${baseUrl}${path}` : '';
+}
 const OPENAI_IMAGE_PROVIDER_META = {
-  jinlong: {
-    label: '金龙中转站',
-    defaultBaseUrl: 'https://img-api.jlaudeapi.com/v1',
-    logProvider: 'jinlong',
-    modelLabel: '生图模型名称',
-  },
   volcengine: {
     label: '火山方舟',
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
@@ -349,11 +342,10 @@ async function runWithOperationTimeout(runner, timeoutMs = AI_REQUEST_TIMEOUT_MS
 }
 
 // 构造模型请求头，仅官方文本服务附带开源客户端标识。
-function createHeaders(apiKey, textModelProvider) {
+function createHeaders(apiKey) {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`,
-    ...(textModelProvider === 'official' ? { 'X-Yibiao-Client-Type': 'open-source' } : {}),
   };
 }
 
@@ -392,7 +384,12 @@ function trackAiRequest(app, config, payload) {
         image_model_name: requestType === 'image' ? modelName : '',
       };
 
-      return fetch(ANALYTICS_ENDPOINT, {
+      const endpoint = buildServiceEndpoint(config, '/track');
+      if (!endpoint) {
+        return undefined;
+      }
+
+      return fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -903,8 +900,7 @@ function applyOutputTokenLimit(body, config, requestLimit = 0) {
   const limit = requestLimit > 0 ? requestLimit : config.output_token_limit;
   if (limit > 0) {
     body.max_completion_tokens = limit;
-    // 官方只接受新字段；其他服务商保留原有的双字段请求方式。
-    if (config.text_model_provider !== 'official') body.max_tokens = limit;
+    body.max_tokens = limit;
   } else {
     delete body.max_completion_tokens;
   }
@@ -913,9 +909,7 @@ function applyOutputTokenLimit(body, config, requestLimit = 0) {
 
 // 构造普通、流式及 JSON 文本请求。
 function createChatRequestBody(config, request, options = {}) {
-  const modelName = config.text_model_provider === 'jinlong'
-    ? (JINLONG_DEPRECATED_MODEL_MAP[config.model_name] || config.model_name)
-    : config.model_name;
+  const modelName = config.model_name;
   const body = {
     model: modelName,
     messages: request.messages,
@@ -976,7 +970,7 @@ async function fetchChatCompletion(app, config, body, options = {}) {
   try {
     return await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: createHeaders(config.api_key, config.text_model_provider),
+      headers: createHeaders(config.api_key),
       body: JSON.stringify(body),
       signal: options.signal || controller.signal,
     });
@@ -2440,7 +2434,7 @@ async function generateImageWithConfig(app, config, request) {
     throw new Error(availability.message);
   }
 
-  if (config.image_model?.provider === 'jinlong' || config.image_model?.provider === 'volcengine' || config.image_model?.provider === 'agnes' || config.image_model?.provider === 'custom') {
+  if (config.image_model?.provider === 'volcengine' || config.image_model?.provider === 'agnes' || config.image_model?.provider === 'custom') {
     return generateOpenAICompatibleImage(app, config, request, config.image_model.provider);
   }
 
@@ -2603,7 +2597,7 @@ function createAiService({ app, configStore }) {
         analytics_created_at: config.analytics_created_at || currentConfig.analytics_created_at,
       };
 
-      if (trackedConfig.image_model?.provider === 'jinlong' || trackedConfig.image_model?.provider === 'volcengine' || trackedConfig.image_model?.provider === 'agnes' || trackedConfig.image_model?.provider === 'custom') {
+      if (trackedConfig.image_model?.provider === 'volcengine' || trackedConfig.image_model?.provider === 'agnes' || trackedConfig.image_model?.provider === 'custom') {
         return testOpenAICompatibleImageModel(app, trackedConfig, trackedConfig.image_model.provider);
       }
 
@@ -2661,7 +2655,7 @@ function createAiService({ app, configStore }) {
           try {
             response = await fetch(`${trimBaseUrl(config.base_url)}/models`, {
               method: 'GET',
-              headers: createHeaders(config.api_key, config.text_model_provider),
+              headers: createHeaders(config.api_key),
             });
           } catch (error) {
             throw markAiRequestError(error, { retryable: true });
@@ -2683,9 +2677,7 @@ function createAiService({ app, configStore }) {
       return {
         success: true,
         message: '模型列表已更新',
-        models: config.text_model_provider === 'jinlong'
-          ? models.filter((id) => !Object.keys(JINLONG_DEPRECATED_MODEL_MAP).includes(id))
-          : models,
+        models,
       };
     },
 
@@ -2695,7 +2687,18 @@ function createAiService({ app, configStore }) {
         return { success: false, message: '请先填写文本模型名称', modelName: '', model: null, syncedAt: '' };
       }
 
-      const response = await fetch(`${MODEL_INFO_ENDPOINT}?modelName=${encodeURIComponent(normalizedModelName)}`);
+      const endpoint = buildServiceEndpoint(configStore.load(), '/model-info');
+      if (!endpoint) {
+        return {
+          success: false,
+          message: '未配置统一服务地址（纯离线版本不提供模型信息缓存），请手动填写模型参数',
+          modelName: normalizedModelName,
+          model: null,
+          syncedAt: '',
+        };
+      }
+
+      const response = await fetch(`${endpoint}?modelName=${encodeURIComponent(normalizedModelName)}`);
       const data = await response.json().catch(() => null);
       if (!response.ok || !data || data.code !== 0) {
         throw new Error(data?.message || `获取模型信息失败：HTTP ${response.status}`);

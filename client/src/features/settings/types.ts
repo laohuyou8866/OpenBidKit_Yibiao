@@ -1,11 +1,10 @@
-import type { ClientConfig, ComponentsConfig, ImageModelConfig, ImageModelProfiles, TextModelConfig, TextModelProfiles, TextModelProvider, UpdateChannel } from '../../shared/types';
+import type { ClientConfig, ComponentsConfig, ImageModelConfig, ImageModelProfiles, TextModelConfig, TextModelProfiles, TextModelProvider } from '../../shared/types';
 
 export type SettingsTab = 'general' | 'text-model' | 'image-model' | 'components' | 'agent' | 'about';
 
 /** 应用级跳转传给设置页的一次性请求，设置页消费后由应用清除。 */
 export interface SettingsPageRequest {
   tab: SettingsTab;
-  openRecharge: boolean;
 }
 
 export interface SettingsPageState {
@@ -16,7 +15,6 @@ export interface SettingsPageState {
     provider: TextModelProvider;
   };
   textModelProfiles: TextModelProfiles;
-  officialApiModelType: ClientConfig['official_api_model_type'];
   imageModel: Omit<ImageModelConfig, 'concurrency_limit'> & {
     concurrency_limit: number | '';
   };
@@ -29,7 +27,6 @@ export interface SettingsPageState {
     developer_mode: boolean;
     developer_token_stats_auto_open: boolean;
     developer_agent_monitor_auto_open: boolean;
-    update_channel: UpdateChannel;
     gpu_hardware_acceleration_enabled: boolean;
     gpu_hardware_acceleration_configured: boolean;
   };

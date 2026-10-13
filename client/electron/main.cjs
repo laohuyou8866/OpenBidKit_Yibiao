@@ -3,13 +3,32 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { registerIpcHandlers } = require('./ipc/index.cjs');
-const { setupAutoUpdate, checkAndDownloadUpdate, triggerUpdateDownload, quitAndInstall, getLatestVersion, getUpdateDownloadUrl } = require('./services/updateService.cjs');
 const { getConfigFilePath, getCredentialLibraryDir, getGeneratedImagesDir, getGpuStartupProbePath, getImportedImagesDir } = require('./utils/paths.cjs');
+
+// 绿色便携版：打包后把用户数据（配置、工作区数据库、缓存）放到 exe 同目录，整个文件夹拷走即用。
+// 目录不可写时（只读介质、Program Files 等）静默回退系统默认路径，保证仍能启动。
+function applyPortableUserDataPath(appInstance) {
+  if (!appInstance.isPackaged) {
+    return;
+  }
+  const portableDir = path.join(path.dirname(appInstance.getPath('exe')), 'user-data');
+  try {
+    fs.mkdirSync(portableDir, { recursive: true });
+    fs.accessSync(portableDir, fs.constants.W_OK);
+  } catch {
+    return;
+  }
+  appInstance.setPath('userData', portableDir);
+  appInstance.setPath('sessionData', path.join(portableDir, 'session'));
+}
+
+applyPortableUserDataPath(app);
 
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 const iconPath = path.join(__dirname, '../assets/icon.ico');
 const packagedIndexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).toString();
-const IP_BLOCK_LIST_ENDPOINT = 'https://analytics.agnet.top/ip-blocks';
+// 统一服务地址来自环境变量 YIBIAO_SERVICE_BASE_URL；为空（纯离线版本）时跳过在线检查。
+const SERVICE_BASE_URL = String(process.env.YIBIAO_SERVICE_BASE_URL || '').trim().replace(/\/+$/, '');
 const GPU_HARDWARE_ACCELERATION_TRIAL_ARG = '--yibiao-trial-hardware-acceleration';
 const FORCE_DISABLE_GPU_ARGS = ['--disable-gpu', '--disable-hardware-acceleration'];
 let appQuitting = false;
@@ -22,8 +41,12 @@ let quitAfterClose = false;
 
 // 应用正常启动后静默检查公网出口 IP，仅明确命中封禁列表时结束进程。
 async function checkBlockedIpAfterStartup() {
+  if (!SERVICE_BASE_URL) {
+    return;
+  }
+
   try {
-    const response = await net.fetch(IP_BLOCK_LIST_ENDPOINT, {
+    const response = await net.fetch(`${SERVICE_BASE_URL}/ip-blocks`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
@@ -490,11 +513,6 @@ app.whenReady().then(() => {
   services = registerIpcHandlers({
     app,
     mainWindow,
-    checkAndDownloadUpdate,
-    triggerUpdateDownload,
-    quitAndInstall,
-    getLatestVersion,
-    getUpdateDownloadUrl,
     gpuStartupState,
     gpuTrialArg: GPU_HARDWARE_ACCELERATION_TRIAL_ARG,
     forceDisableGpuArgs: FORCE_DISABLE_GPU_ARGS,
@@ -503,7 +521,6 @@ app.whenReady().then(() => {
     openDeveloperAgentMonitorWindow,
     closeDeveloperAgentMonitorWindow,
   });
-  setupAutoUpdate({ app, mainWindow });
   mainWindow.on('closed', () => {
     closeDeveloperTokenStatsWindow();
     closeDeveloperAgentMonitorWindow();

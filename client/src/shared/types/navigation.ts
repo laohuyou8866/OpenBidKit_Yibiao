@@ -6,7 +6,6 @@ export type SectionId =
   | 'document-knowledge-base'
   | 'credential-library'
   | 'image-knowledge-base'
-  | 'resources'
   | 'bid-check'
   | 'duplicate-check'
   | 'rejection-check'
@@ -22,8 +21,7 @@ export type SectionId =
   | 'developer-expansion-replace-test'
   | 'developer-layout-budget-test'
   | 'developer-agent-test'
-  | 'settings'
-  | 'plugin-manager';
+  | 'settings';
 
 export interface AppMenuNotice {
   message: string;

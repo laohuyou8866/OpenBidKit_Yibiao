@@ -73,8 +73,3 @@ export function updateClientsPager() {
   state.prevClientsPage.disabled = appState.clientsPage <= 1;
   state.nextClientsPage.disabled = appState.clientsPage >= totalPages;
 }
-
-export function setNoticeStatus(message, type = '') {
-  state.noticeStatus.className = type ? `notice-status ${type}` : 'notice-status';
-  state.noticeStatus.textContent = message || '';
-}

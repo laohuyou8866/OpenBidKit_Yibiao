@@ -218,27 +218,6 @@ function copyPatchFields(target, source, fields) {
   }
 }
 
-// 提取技术方案流程中由用户选择或填写的任务参数，不包含生成结果和正文缓存。
-function createTechnicalPlanUserSettings(state = {}) {
-  const settings = {};
-  copyPatchFields(settings, state, [
-    'step',
-    'tenderFile',
-    'tenderFiles',
-    'originalPlanFile',
-    'bidAnalysisMode',
-    'bidAnalysisSelectedTaskIds',
-    'bidSectionMode',
-    'outlineMode',
-    'outlineExpansionMode',
-    'outlineWordControlOptions',
-    'outlineWordControlSnapshot',
-    'referenceKnowledgeDocumentIds',
-    'contentGenerationOptions',
-  ]);
-  return settings;
-}
-
 const INTERRUPTED_SECTION_ERROR = '上次生成被中断，请继续生成。';
 
 function clearOutlineContentByIds(items, interruptedIds) {
@@ -642,26 +621,6 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
     return technicalPlanStore.loadTechnicalPlan();
   }
 
-  // 在 Agent 失败时采集父任务及其前置步骤的用户参数快照。
-  function createAgentUserTaskContext(type, definition, payload, currentTask) {
-    const workspaceState = loadWorkspaceState(definition) || {};
-    return {
-      managed_task: {
-        type,
-        label: definition.label || type,
-        group: definition.group || '',
-        group_label: definition.groupLabel || '',
-        step: definition.step,
-        state_key: definition.stateKey || '',
-        payload,
-        state: currentTask,
-      },
-      workflow_settings: definition.stateKey === 'technicalPlan'
-        ? createTechnicalPlanUserSettings(workspaceState)
-        : {},
-    };
-  }
-
   function startManagedTask(type, payload, runner, initialPartial = {}, startOptions = {}) {
     const existingTask = activeTasks.get(type);
     if (existingTask && isActiveTaskStatus(existingTask.status)) {
@@ -704,6 +663,11 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
           ? currentTask.logs
           : ['已请求暂停，正在等待当前 AI 请求完成。'];
         return checkpointTask({ status: 'pausing', pause_requested: true, logs: pausedLogs }).task;
+      },
+      // 立即中止当前 Agent 调用以完成暂停；会话与工作区产物保留，之后可用「继续生成」接着跑。
+      abortForPause() {
+        this.pauseRequested = true;
+        try { abortController.abort('pause-requested'); } catch {}
       },
       waitForOutlineSelection() {
         if (abortController.signal.aborted) {
@@ -872,22 +836,15 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
           ? feasibilityReportStore
           : duplicateCheckStore;
     const runnerAiService = aiService?.withQueueScope ? aiService.withQueueScope(queueScopeId, taskControl.signal) : aiService;
-    const agentTaskContextProvider = () => createAgentUserTaskContext(type, definition, payload, currentTask);
-    const runnerAgentService = agentService.bindTaskContext(
-      agentTaskContextProvider,
-      {
-        queueScopeId,
-        signal: taskControl.signal,
-        primary_session: startOptions.primarySession === true,
-      },
-    );
-    const runnerOrdinaryAgentService = agentService.bindTaskContext(
-      agentTaskContextProvider,
-      {
-        queueScopeId,
-        signal: taskControl.signal,
-      },
-    );
+    const runnerAgentService = agentService.bindTaskContext({
+      queueScopeId,
+      signal: taskControl.signal,
+      primary_session: startOptions.primarySession === true,
+    });
+    const runnerOrdinaryAgentService = agentService.bindTaskContext({
+      queueScopeId,
+      signal: taskControl.signal,
+    });
     runner({ templateStore, aiService: runnerAiService, agentService: runnerAgentService, ordinaryAgentService: runnerOrdinaryAgentService, workspaceStore: runnerWorkspaceStore, knowledgeBaseService, openXmlHelperService, updateTask, checkpointTask, payload, taskControl, previousState }).catch((error) => {
       if (!taskControl.signal.aborted) {
         checkpointTask({ status: 'error', error: error.message || '任务执行失败' });
@@ -1003,7 +960,11 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
     }
 
     const outlineTask = technicalPlan.outlineGenerationTask;
-    if (!isActiveTaskStatus(outlineTask?.status)) {
+    if (!outlineTask || outlineTask.status === 'success') {
+      return;
+    }
+    // 已暂停或已判定可继续的任务保持原状态；其余（含上次以失败/中断收尾的）重新判定一次可续跑性。
+    if (!isActiveTaskStatus(outlineTask.status) && outlineTask.stats?.agent?.resumable === true) {
       return;
     }
 
@@ -1039,7 +1000,14 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
       return;
     }
 
-    const message = '上次目录生成未完成，请重新生成目录。';
+    // 会话仍在且有恢复载荷时，保留工作区产物与会话并标记为「可继续」；
+    // 用户点继续即从上次阶段接着跑，不必重跑已完成的阶段。
+    const resumable = Boolean(persistentTask?.state?.session_file)
+      && agentService.hasPersistentTaskSession(OUTLINE_AGENT_TASK_KEY)
+      && Boolean(outlineTask.stats?.agent?.resume_payload);
+    const message = resumable
+      ? '上次目录生成中断，可从上次进度继续。'
+      : '上次目录生成未完成，请重新生成目录。';
     if (persistentTask) {
       try {
         agentService.updatePersistentTask(OUTLINE_AGENT_TASK_KEY, {
@@ -1058,14 +1026,20 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
         });
       } catch {}
     }
-    try { technicalPlanStore.clearBidTemplate(); } catch {}
+    // 可继续时不动招标模板，否则会把已完成阶段依赖的工作区文件清掉。
+    if (!resumable) {
+      try { technicalPlanStore.clearBidTemplate(); } catch {}
+    }
     const recoveredStats = { ...(outlineTask.stats || {}) };
-    delete recoveredStats.outline_selection;
+    if (!resumable) {
+      delete recoveredStats.outline_selection;
+    }
     if (recoveredStats.agent) {
       recoveredStats.agent = {
         ...recoveredStats.agent,
         status: 'interrupted',
         agent_connection: 'idle',
+        resumable,
       };
     }
     if (recoveredStats.template_agent) {
@@ -1434,6 +1408,47 @@ function createTaskService({ templateStore, aiService, agentService, autoConfirm
           technicalPlanStore.clearBidTemplate();
         },
       });
+    },
+    // 目录生成中断后继续：保留持久任务（Agent 会话）与工作区已完成产物，从上次阶段接着跑。
+    resumeOutlineGeneration() {
+      const technicalPlan = technicalPlanStore.loadTechnicalPlan() || {};
+      const outlineTask = technicalPlan.outlineGenerationTask;
+      if (!outlineTask || outlineTask.stats?.agent?.resumable !== true) {
+        throw new Error('当前没有可继续的目录生成任务');
+      }
+      if (!agentService.hasPersistentTaskSession(OUTLINE_AGENT_TASK_KEY)) {
+        throw new Error('上次目录生成的会话已失效，请重新生成目录');
+      }
+      const agentState = outlineTask.stats?.agent || {};
+      return startManagedTask('outline-generation', {
+        ...(agentState.resume_payload || {}),
+        agent_resume: { phase: 'resume' },
+      }, runOutlineGenerationTaskV2, {}, {
+        existingTask: outlineTask,
+        skipInitialStateUpdate: true,
+        primarySession: agentService.isPrimarySession({ task_key: OUTLINE_AGENT_TASK_KEY }),
+      });
+    },
+    // 暂停目录生成：中止当前 Agent 调用，但保留会话与工作区产物，之后可用「继续生成」接着跑。
+    pauseOutlineGeneration() {
+      const task = activeTasks.get('outline-generation');
+      const control = activeTaskControls.get('outline-generation');
+      if (task && isActiveTaskStatus(task.status) && control?.requestPause) {
+        if (control.queueScopeId && aiService?.pauseQueueScope) {
+          aiService.pauseQueueScope(control.queueScopeId);
+        }
+        control.requestPause();
+        control.abortForPause?.();
+        return activeTasks.get('outline-generation');
+      }
+
+      const technicalPlan = technicalPlanStore.loadTechnicalPlan() || {};
+      const outlineTask = technicalPlan.outlineGenerationTask;
+      if (outlineTask?.status === 'paused' || outlineTask?.status === 'pausing') {
+        return outlineTask;
+      }
+
+      throw new Error('当前没有正在生成的目录任务。');
     },
     startOutlineAdjustment(payload) {
       return startManagedTask('outline-adjustment', payload, runOutlineAdjustmentTask, {}, {

@@ -14,6 +14,7 @@
     "check": "npm run check:docx && npm run check:chrome",
     "dist": "npm run build && node scripts/prepare-openxml-helper.cjs && electron-builder",
     "dist:win": "npm run build && node scripts/prepare-openxml-helper.cjs --platform win32 --arch x64 && electron-builder --win",
+    "dist:win:portable": "npm run build && node scripts/prepare-openxml-helper.cjs --platform win32 --arch x64 && electron-builder --win dir",
     "dist:mac": "npm run build && node scripts/prepare-openxml-helper.cjs --platform darwin --arch all && electron-builder --mac",
     "postinstall": "patch-package --error-on-fail --error-on-warn && electron-builder install-app-deps",
     "preview": "vite preview --host 127.0.0.1 --port 4173",

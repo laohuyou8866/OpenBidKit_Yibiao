@@ -13,8 +13,6 @@ import DuplicateCheckPage from '../features/duplicate-check/pages/DuplicateCheck
 import CredentialLibraryPage from '../features/credential-library/pages/CredentialLibraryPage';
 import KnowledgeBasePage from '../features/knowledge-base/pages/KnowledgeBasePage';
 import RejectionCheckPage from '../features/rejection-check/pages/RejectionCheckPage';
-import ResourcesPage from '../features/resources/pages/ResourcesPage';
-import PluginsPage from '../features/plugins/pages/PluginsPage';
 import SettingsPage from '../features/settings/pages/SettingsPage';
 import TechnicalPlanHome from '../features/technical-plan/pages/TechnicalPlanHome';
 import FeasibilityReportHome from '../features/feasibility-report/pages/FeasibilityReportHome';
@@ -50,10 +48,6 @@ function AppRouter({ activeSection, developerMode, onDeveloperModeChange, onSect
       return <KnowledgeBasePage />;
     case 'credential-library':
       return <CredentialLibraryPage developerMode={developerMode} />;
-    case 'resources':
-      return <ResourcesPage />;
-    case 'plugin-manager':
-      return <PluginsPage />;
     case 'duplicate-check':
       return <DuplicateCheckPage />;
     case 'rejection-check':

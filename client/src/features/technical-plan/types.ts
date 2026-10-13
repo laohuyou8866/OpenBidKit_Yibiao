@@ -130,6 +130,8 @@ export interface BackgroundTaskState {
       phase?: 'initial-outline' | 'outline-selection' | 'score-planning' | 'leaf_allocation' | 'children_generation' | 'leaf_adjustment' | 'leaf_final_decision' | 'outline_review_compaction' | 'outline_review' | 'completed' | string;
       agent_connection?: 'idle' | 'running';
       session_file?: string;
+      /** 中断后是否可从上次阶段继续（Main 侧恢复未完成任务时写入）。 */
+      resumable?: boolean;
       resume_payload?: {
         reference_knowledge_document_ids?: string[];
         outline_mode?: OutlineMode;

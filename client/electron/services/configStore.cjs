@@ -4,10 +4,9 @@ const { getConfigFilePath } = require('../utils/paths.cjs');
 const { createAnalyticsClientId } = require('../utils/machineIdentity.cjs');
 const { defaultExportFormat, normalizeExportFormat } = require('./exportFormatDefaults.cjs');
 
-const textModelProviders = ['official', 'jinlong', 'volcengine', 'deepseek', 'agnes', 'custom'];
-const imageModelProviders = ['jinlong', 'volcengine', 'google-ai-studio', 'agnes', 'custom', 'comfyui'];
+const textModelProviders = ['volcengine', 'deepseek', 'agnes', 'custom'];
+const imageModelProviders = ['volcengine', 'google-ai-studio', 'agnes', 'custom', 'comfyui'];
 const aiRequestModes = ['normal', 'stream'];
-const updateChannels = ['github', 'cloudflare', 'atomgit'];
 const DEFAULT_TEXT_CONTEXT_LENGTH_LIMIT = 400000;
 const DEFAULT_TEXT_CONCURRENCY_LIMIT = 10;
 const DEFAULT_TEXT_TEMPERATURE = 0.7;
@@ -21,8 +20,6 @@ const googleImageSizes = ['512', '1K', '2K', '4K'];
 const agnesImageRatios = ['1:1', '3:4', '4:3', '16:9', '9:16', '2:3', '3:2', '21:9'];
 
 const textProviderBaseUrls = {
-  official: 'https://v3.yibiao.pro/qhp-yibiao/anonymous/yibiao/openai/v1',
-  jinlong: 'https://jlaudeapi.com/v1',
   volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
   deepseek: 'https://api.deepseek.com',
   agnes: 'https://apihub.agnes-ai.com/v1',
@@ -30,32 +27,6 @@ const textProviderBaseUrls = {
 };
 
 const defaultTextModelProfiles = {
-  official: {
-    api_key: '',
-    base_url: textProviderBaseUrls.official,
-    model_name: 'yibiao-text',
-    multimodal_enabled: true,
-    reasoning_effort: '',
-    context_length_limit: 258000,
-    output_token_limit: 128000,
-    concurrency_limit: 50,
-    temperature_enabled: false,
-    temperature: DEFAULT_TEXT_TEMPERATURE,
-    request_mode: 'stream',
-  },
-  jinlong: {
-    api_key: '',
-    base_url: textProviderBaseUrls.jinlong,
-    model_name: 'gpt-3.5-turbo',
-    multimodal_enabled: false,
-    reasoning_effort: '',
-    context_length_limit: DEFAULT_TEXT_CONTEXT_LENGTH_LIMIT,
-    output_token_limit: 0,
-    concurrency_limit: DEFAULT_TEXT_CONCURRENCY_LIMIT,
-    temperature_enabled: false,
-    temperature: DEFAULT_TEXT_TEMPERATURE,
-    request_mode: 'stream',
-  },
   volcengine: {
     api_key: '',
     base_url: textProviderBaseUrls.volcengine,
@@ -111,18 +82,6 @@ const defaultTextModelProfiles = {
 };
 
 const defaultImageModelProfiles = {
-  jinlong: {
-    provider: 'jinlong',
-    base_url: 'https://img-api.jlaudeapi.com/v1',
-    api_key: '',
-    model_name: 'gpt-image-2',
-    image_size: '1024x1024',
-    request_mode: 'normal',
-    concurrency_limit: DEFAULT_IMAGE_CONCURRENCY_LIMIT,
-    status: 'untested',
-    tested_at: '',
-    last_error: '',
-  },
   volcengine: {
     provider: 'volcengine',
     base_url: 'https://ark.cn-beijing.volces.com/api/v3',
@@ -188,12 +147,11 @@ const defaultImageModelProfiles = {
 };
 
 const defaultConfig = {
-  text_model_provider: 'official',
-  official_api_model_type: 'cost-effective',
+  text_model_provider: 'deepseek',
   text_model_profiles: defaultTextModelProfiles,
-  ...defaultTextModelProfiles.official,
+  ...defaultTextModelProfiles.deepseek,
   image_model: {
-    ...defaultImageModelProfiles.jinlong,
+    ...defaultImageModelProfiles.custom,
   },
   image_model_profiles: defaultImageModelProfiles,
   components: {
@@ -204,7 +162,6 @@ const defaultConfig = {
     mermaid_concurrency_limit: DEFAULT_COMPONENT_CONCURRENCY_LIMIT,
     html_concurrency_limit: DEFAULT_COMPONENT_CONCURRENCY_LIMIT,
   },
-  update_channel: 'atomgit',
   gpu_hardware_acceleration_enabled: true,
   gpu_hardware_acceleration_configured: true,
   export_format: defaultExportFormat,
@@ -213,6 +170,9 @@ const defaultConfig = {
   developer_token_stats_auto_open: false,
   developer_agent_monitor_auto_open: false,
   storage_cleanup_version: 0,
+  // 统一服务地址：为空即纯离线版本（不发起任何在线请求）。
+  // 内网/公网部署需要统计与模型信息缓存时，设环境变量 YIBIAO_SERVICE_BASE_URL 或在此填写。
+  service_base_url: '',
   analytics_client_id: '',
   analytics_created_at: '',
 };
@@ -238,10 +198,6 @@ function isImageModelProvider(value) {
 
 function normalizeAiRequestMode(value, fallback = 'stream') {
   return aiRequestModes.includes(value) ? value : fallback;
-}
-
-function normalizeUpdateChannel(value, fallback = defaultConfig.update_channel) {
-  return updateChannels.includes(value) ? value : fallback;
 }
 
 function normalizeTextContextLengthLimit(value, fallback = DEFAULT_TEXT_CONTEXT_LENGTH_LIMIT) {
@@ -423,22 +379,21 @@ function normalizeImageRatio(value) {
 function normalizeImageModelProfile(provider, profile) {
   const defaults = defaultImageModelProfiles[provider];
   const source = profile || {};
-  const useProviderDefaultImageModel = provider === 'jinlong' && !String(source.model_name ?? '').trim();
   return {
     provider,
     base_url: provider === 'custom' || provider === 'comfyui'
       ? source.base_url !== undefined ? source.base_url : defaults.base_url
       : defaults.base_url,
     api_key: source.api_key !== undefined ? source.api_key : defaults.api_key,
-    model_name: useProviderDefaultImageModel ? defaults.model_name : source.model_name !== undefined ? source.model_name : defaults.model_name,
-    image_size: normalizeImageSize(provider, useProviderDefaultImageModel ? defaults.image_size : source.image_size, defaults.image_size),
+    model_name: source.model_name !== undefined ? source.model_name : defaults.model_name,
+    image_size: normalizeImageSize(provider, source.image_size, defaults.image_size),
     ...(provider === 'agnes' ? { image_ratio: normalizeImageRatio(source.image_ratio) } : {}),
-    request_mode: normalizeAiRequestMode(useProviderDefaultImageModel ? defaults.request_mode : source.request_mode, defaults.request_mode),
+    request_mode: normalizeAiRequestMode(source.request_mode, defaults.request_mode),
     concurrency_limit: normalizeImageConcurrencyLimit(source.concurrency_limit, defaults.concurrency_limit),
     comfyui_workflow: source.comfyui_workflow !== undefined ? String(source.comfyui_workflow) : (defaults.comfyui_workflow || ''),
-    status: useProviderDefaultImageModel ? defaults.status : source.status !== undefined ? source.status : defaults.status,
-    tested_at: useProviderDefaultImageModel ? defaults.tested_at : source.tested_at !== undefined ? source.tested_at : defaults.tested_at,
-    last_error: useProviderDefaultImageModel ? defaults.last_error : source.last_error !== undefined ? source.last_error : defaults.last_error,
+    status: source.status !== undefined ? source.status : defaults.status,
+    tested_at: source.tested_at !== undefined ? source.tested_at : defaults.tested_at,
+    last_error: source.last_error !== undefined ? source.last_error : defaults.last_error,
   };
 }
 
@@ -468,7 +423,6 @@ function normalizeConfig(config) {
   } else if (textModelProvider === 'custom' && !hasTextModelProfileData(textModelProfiles.custom)) {
     textModelProfiles.custom = textProfileFromUnknownProvider(source, rawTextProvider, textModelProfiles.custom);
   }
-  const officialApiModelType = source.official_api_model_type ?? defaultConfig.official_api_model_type;
   const activeTextProfile = textModelProfiles[textModelProvider];
   const sourceImageModel = source.image_model && typeof source.image_model === 'object' ? source.image_model : {};
   const imageModelProvider = isImageModelProvider(sourceImageModel.provider) ? sourceImageModel.provider : defaultConfig.image_model.provider;
@@ -487,7 +441,6 @@ function normalizeConfig(config) {
   return {
     ...defaultConfig,
     text_model_provider: textModelProvider,
-    official_api_model_type: officialApiModelType,
     text_model_profiles: textModelProfiles,
     api_key: activeTextProfile.api_key,
     base_url: activeTextProfile.base_url,
@@ -503,7 +456,6 @@ function normalizeConfig(config) {
     image_model: activeImageProfile,
     image_model_profiles: imageModelProfiles,
     components: normalizeComponentsConfig(source.components),
-    update_channel: normalizeUpdateChannel(source.update_channel),
     gpu_hardware_acceleration_enabled: gpuHardwareAccelerationEnabled,
     gpu_hardware_acceleration_configured: gpuHardwareAccelerationConfigured === false ? true : gpuHardwareAccelerationConfigured,
     export_format: normalizeExportFormat(source.export_format),
@@ -518,7 +470,74 @@ function normalizeConfig(config) {
       : defaultConfig.storage_cleanup_version,
     analytics_client_id: source.analytics_client_id || defaultConfig.analytics_client_id,
     analytics_created_at: source.analytics_created_at || defaultConfig.analytics_created_at,
+    service_base_url: normalizeServiceBaseUrl(process.env.YIBIAO_SERVICE_BASE_URL || source.service_base_url),
   };
+}
+
+// 统一服务地址归一化：去掉空白与末尾斜杠；空字符串代表纯离线（不发起在线请求）。
+function normalizeServiceBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+// 密钥类字段落盘前用 Electron safeStorage 加密（绑定当前系统用户），读取时解密。
+// 旧配置里的明文值仍可正常读取，下一次写盘会自动转成密文。
+const SECRET_FIELD_NAMES = new Set(['api_key', 'mineru_token', 'access_token', 'refresh_token', 'secret', 'password', 'client_secret']);
+const SECRET_PREFIX = 'enc:v1:';
+
+let safeStorage = null;
+try {
+  ({ safeStorage } = require('electron'));
+} catch {
+  safeStorage = null;
+}
+
+function canEncryptSecrets() {
+  try {
+    return Boolean(safeStorage && safeStorage.isEncryptionAvailable());
+  } catch {
+    return false;
+  }
+}
+
+function mapSecretFields(value, transform) {
+  if (Array.isArray(value)) {
+    return value.map((item) => mapSecretFields(item, transform));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const output = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (SECRET_FIELD_NAMES.has(key) && typeof item === 'string' && item) {
+      output[key] = transform(item);
+      continue;
+    }
+    output[key] = mapSecretFields(item, transform);
+  }
+  return output;
+}
+
+function encryptSecretValue(value) {
+  if (value.startsWith(SECRET_PREFIX) || !canEncryptSecrets()) {
+    return value;
+  }
+  try {
+    return `${SECRET_PREFIX}${safeStorage.encryptString(value).toString('base64')}`;
+  } catch {
+    return value;
+  }
+}
+
+function decryptSecretValue(value) {
+  if (!value.startsWith(SECRET_PREFIX)) {
+    return value;
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(value.slice(SECRET_PREFIX.length), 'base64'));
+  } catch {
+    // 换机器或换系统用户后密文无法解开，按空值处理，避免把密文当成密钥继续使用。
+    return '';
+  }
 }
 
 function createConfigStore(app) {
@@ -529,7 +548,7 @@ function createConfigStore(app) {
     fs.mkdirSync(path.dirname(configFile), { recursive: true });
     try {
       tempFile = `${configFile}.${process.pid}.${Date.now()}.tmp`;
-      fs.writeFileSync(tempFile, JSON.stringify(config, null, 2), 'utf-8');
+      fs.writeFileSync(tempFile, JSON.stringify(mapSecretFields(config, encryptSecretValue), null, 2), 'utf-8');
       fs.renameSync(tempFile, configFile);
     } catch (error) {
       if (tempFile) {
@@ -565,7 +584,7 @@ function createConfigStore(app) {
 
       try {
         const raw = fs.readFileSync(configFile, 'utf-8');
-        const parsedConfig = JSON.parse(raw);
+        const parsedConfig = mapSecretFields(JSON.parse(raw), decryptSecretValue);
         const config = normalizeConfig(parsedConfig);
         const nextConfig = withAnalyticsIdentity(config);
         if (JSON.stringify(parsedConfig) !== JSON.stringify(nextConfig)) {

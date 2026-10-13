@@ -13,6 +13,14 @@ function registerTaskIpc({ taskService }) {
     taskService.subscribe(event.sender);
     return taskService.startOutlineGeneration(payload);
   });
+  ipcMain.handle('tasks:resume-outline-generation', (event) => {
+    taskService.subscribe(event.sender);
+    return taskService.resumeOutlineGeneration();
+  });
+  ipcMain.handle('tasks:pause-outline-generation', (event) => {
+    taskService.subscribe(event.sender);
+    return taskService.pauseOutlineGeneration();
+  });
   ipcMain.handle('tasks:confirm-outline-selection', (event, payload) => {
     taskService.subscribe(event.sender);
     return taskService.confirmOutlineSelection(payload);

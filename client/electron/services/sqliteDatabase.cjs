@@ -3,7 +3,7 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 const { getWorkspaceDatabasePath } = require('../utils/paths.cjs');
 
-const schemaVersion = 36;
+const schemaVersion = 37;
 
 // 保存当前工作区的一份开票信息。
 function createOfficialInvoiceSchema(db) {
@@ -16,6 +16,11 @@ function createOfficialInvoiceSchema(db) {
       email TEXT NOT NULL DEFAULT ''
     );
   `);
+}
+
+// 移除已停用的官方 API 开票信息表。
+function dropOfficialInvoiceSchema(db) {
+  db.exec('DROP TABLE IF EXISTS official_invoice_info;');
 }
 
 function createInitialSchema(db) {
@@ -1317,7 +1322,6 @@ const schemaHealthTableGroups = [
     tables: ['feasibility_report_meta', 'feasibility_report_tasks', 'feasibility_report_outline_nodes'],
     repair: createFeasibilityReportSchema,
   },
-  { version: 24, tables: ['official_invoice_info'], repair: createOfficialInvoiceSchema },
   {
     version: 25,
     tables: ['technical_plan_generation_config', 'technical_plan_generation_bid_tasks', 'technical_plan_generation_reference_docs'],
@@ -1780,6 +1784,11 @@ const migrations = [
     version: 36,
     description: '技术方案配图比例字段升级为整数并恢复默认 30%',
     up: migrateTechnicalPlanImageQuantity,
+  },
+  {
+    version: 37,
+    description: '移除官方 API 开票信息表',
+    up: dropOfficialInvoiceSchema,
   },
 ];
 

@@ -1,64 +1,18 @@
 import { corsHeaders, json, methodNotAllowed, requireAdmin, unauthorized } from '../http.js';
 import {
-  checkAgentErrorReception,
   deleteAgentErrors,
   getAgentErrorDownload,
   listAgentErrors,
-  normalizeAgentErrorMeta,
   readAgentErrorConfig,
   saveAgentErrorConfig,
-  storeAgentError,
-  verifyAgentErrorLicense,
 } from '../services/agentErrorStore.js';
 import { isValidProjectName, normalizeText } from '../utils.js';
 
-function decodeBase64UrlJson(value) {
-  const text = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
-  const padded = `${text}${'='.repeat((4 - (text.length % 4)) % 4)}`;
-  const binary = atob(padded);
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return JSON.parse(new TextDecoder().decode(bytes));
-}
-
-// 接收客户端 gzip 诊断包，未开启或版本不匹配时不读取正文。
-export async function handleAgentErrorIngest(request, env, url) {
-  if (request.method === 'GET') {
-    const projectName = normalizeText(url.searchParams.get('projectName'), 80);
-    const version = normalizeText(url.searchParams.get('version'), 50);
-    const reception = await checkAgentErrorReception(env, projectName, version);
-    return json({ code: 0, accepted: reception.accepted === true }, { headers: { 'Cache-Control': 'no-store' } });
-  }
-  if (request.method !== 'POST') return methodNotAllowed();
-  let meta;
-  try {
-    meta = normalizeAgentErrorMeta(decodeBase64UrlJson(request.headers.get('X-Yibiao-Report-Meta')));
-  } catch {
-    meta = null;
-  }
-  if (!meta) return json({ code: 400, message: 'invalid report meta' }, { status: 400 });
-
-  const reception = await checkAgentErrorReception(env, meta.projectName, meta.version, meta.compressedBytes);
-  if (!reception.accepted) {
-    return json({ code: 0, accepted: false, reason: reception.reason }, { headers: { 'Cache-Control': 'no-store' } });
-  }
-
-  let license;
-  try {
-    license = decodeBase64UrlJson(request.headers.get('X-Yibiao-License'));
-  } catch {
-    license = null;
-  }
-  if (!await verifyAgentErrorLicense(env, license, meta)) return unauthorized();
-  if (request.headers.get('Content-Type') !== 'application/gzip') {
-    return json({ code: 400, message: 'invalid content type' }, { status: 400 });
-  }
-
-  const body = await request.arrayBuffer();
-  if (body.byteLength !== meta.compressedBytes) {
-    return json({ code: 400, message: 'invalid content length' }, { status: 400 });
-  }
-  const result = await storeAgentError(env, meta, body, reception.retentionDays);
-  return json({ code: 0, ...result }, { headers: { 'Cache-Control': 'no-store' } });
+// Agent 失败诊断上报已永久关闭：不再接收任何诊断包，旧版本客户端的 preflight 与直发一律拒收，
+// 且不读取请求正文。管理端的列表、下载与删除历史数据能力保留，便于清理已收到的存量报告。
+export async function handleAgentErrorIngest(request) {
+  if (request.method !== 'GET' && request.method !== 'POST') return methodNotAllowed();
+  return json({ code: 0, accepted: false, reason: 'disabled' }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function handleAdminAgentErrorConfig(request, env, url) {

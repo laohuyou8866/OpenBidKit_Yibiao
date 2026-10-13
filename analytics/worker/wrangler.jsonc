@@ -54,10 +54,6 @@
     {
       "binding": "AGENT_ERROR_BUCKET",
       "bucket_name": "openbidkit-agent-errors"
-    },
-    {
-      "binding": "RESOURCE_BUCKET",
-      "bucket_name": "openbidkit"
     }
   ]
 }

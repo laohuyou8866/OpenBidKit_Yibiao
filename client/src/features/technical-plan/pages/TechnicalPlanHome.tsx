@@ -9,7 +9,7 @@ import ContentEditPage from './ContentEditPage';
 import { useTechnicalPlanWorkflow } from '../hooks/useTechnicalPlanWorkflow';
 import { bidAnalysisTasks, getBidAnalysisTasks, isMissingBidAnalysisResult, isMissingTechnicalScoreItems } from '../services/bidAnalysisWorkflow';
 import { trackPageView } from '../../../shared/analytics/analytics';
-import { AppDialog, FloatingToolbar, ProgressBar, ToolbarArrowLeftIcon, ToolbarArrowRightIcon, ToolbarDocumentIcon, ToolbarSparkleIcon, useToast } from '../../../shared/ui';
+import { AppDialog, FloatingToolbar, ProgressBar, ToolbarArrowLeftIcon, ToolbarArrowRightIcon, ToolbarDocumentIcon, useToast } from '../../../shared/ui';
 import type { BackgroundTaskState, BidAnalysisTasks, ContentGenerationOptions, GlobalFactGroupState, GlobalFactsMode, SaveOutlineRequest, SaveOutlineSelectionRequest, TechnicalPlanState, TechnicalPlanStep } from '../types';
 import type { TechnicalPlanOutlineData as OutlineData, TechnicalPlanOutlineItem as OutlineItem, OutlineWordControlOptions, WordExportProgressEvent, WordExportStructureIssue } from '../../../shared/types';
 import type { ExportTemplateRecord, ExportTemplateScope } from '../../../shared/types/exportFormat';
@@ -38,7 +38,6 @@ interface WordControlWarningDialogState {
   metrics: WordControlWarningMetric[];
 }
 
-const PET_PLUGIN_ID = 'openbidkit-pet';
 
 const technicalPlanSteps: TechnicalPlanStep[] = [
   'document-analysis',
@@ -184,8 +183,6 @@ function TechnicalPlanHome({ registerLeaveGuard }: TechnicalPlanHomeProps) {
   const [wordControlWarningDialog, setWordControlWarningDialog] = useState<WordControlWarningDialogState | null>(null);
   const [pendingWordControlWarningTaskId, setPendingWordControlWarningTaskId] = useState<string | null>(null);
   const [savingSortBeforeLeave, setSavingSortBeforeLeave] = useState(false);
-  const [petInstallDialogOpen, setPetInstallDialogOpen] = useState(false);
-  const [installingPetPlugin, setInstallingPetPlugin] = useState(false);
   const [bidAnalysisFocusRequest, setBidAnalysisFocusRequest] = useState<{ taskId: string } | null>(null);
   const [globalFactsFocusRequest, setGlobalFactsFocusRequest] = useState<{ groupId: string } | null>(null);
   const [generationSettingsInitialTab, setGenerationSettingsInitialTab] = useState<'content' | 'appearance'>('content');
@@ -908,68 +905,6 @@ function TechnicalPlanHome({ registerLeaveGuard }: TechnicalPlanHomeProps) {
   const globalFactsConfigLocked = generationConfigLocked || isGlobalFactsGenerating || isGlobalFactsAdjusting;
   const contentConfigLocked = generationConfigLocked;
   const isFactsAiStep = state.step === 'global-facts';
-  const isAiAdjusting = isFactsAiStep ? isGlobalFactsAdjusting : isOutlineAdjusting;
-  const aiAdjustDisabled = isFactsAiStep
-    ? !state.globalFacts.length || isGlobalFactsGenerating || isGlobalFactsAdjusting
-    : !state.outlineData || !state.outlineWordControlSnapshot || isOutlineGenerating || isOutlineAdjusting;
-  const aiAdjustTooltip = isFactsAiStep
-    ? (isGlobalFactsAdjusting
-      ? 'AI 正在按要求调整全局事实，请稍候'
-      : isGlobalFactsGenerating || !state.globalFacts.length
-        ? '全局事实设定结束后才能使用 AI 调整'
-        : '通过桌宠 AI 对话调整当前全局事实')
-    : (isOutlineAdjusting
-      ? 'AI 正在按要求调整目录，请稍候'
-      : isOutlineGenerating || !state.outlineData
-        ? '目录生成结束后才能使用 AI 调整'
-        : !state.outlineWordControlSnapshot
-          ? '当前目录缺少字数控制生效配置，请重新生成目录'
-          : '通过桌宠 AI 对话调整当前目录');
-
-  const openPetAiChat = useCallback(async () => {
-    await window.yibiao!.plugins.notifyEvent(PET_PLUGIN_ID, 'open-ai-chat');
-  }, []);
-
-  const handleAiAdjustClick = useCallback(async () => {
-    try {
-      const plugins = await window.yibiao!.plugins.getAvailablePlugins();
-      const pet = plugins.find((plugin) => plugin.id === PET_PLUGIN_ID);
-      if (!pet) {
-        showToast('插件市场中未找到桌宠插件，请在插件市场刷新后重试', 'error');
-        return;
-      }
-      if (!pet.installed || !pet.enabled) {
-        setPetInstallDialogOpen(true);
-        return;
-      }
-      await openPetAiChat();
-      showToast('请在桌宠对话框中输入调整要求', 'info');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : '打开桌宠 AI 对话失败', 'error');
-    }
-  }, [openPetAiChat, showToast]);
-
-  const installPetPluginAndOpenChat = useCallback(async () => {
-    setInstallingPetPlugin(true);
-    try {
-      const plugins = await window.yibiao!.plugins.getAvailablePlugins();
-      const pet = plugins.find((plugin) => plugin.id === PET_PLUGIN_ID);
-      if (!pet) {
-        throw new Error('插件市场中未找到桌宠插件');
-      }
-      if (!pet.installed) {
-        await window.yibiao!.plugins.install(PET_PLUGIN_ID);
-      }
-      await window.yibiao!.plugins.enable(PET_PLUGIN_ID);
-      setPetInstallDialogOpen(false);
-      await openPetAiChat();
-      showToast('桌宠已启用，请在桌宠对话框中输入调整要求', 'success');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : '安装桌宠插件失败', 'error');
-    } finally {
-      setInstallingPetPlugin(false);
-    }
-  }, [openPetAiChat, showToast]);
   const navigationActions = state.step === 'content-edit'
     ? [
       {
@@ -1031,20 +966,6 @@ function TechnicalPlanHome({ registerLeaveGuard }: TechnicalPlanHomeProps) {
         },
       ],
     },
-    ...(state.step === 'outline-generation' || state.step === 'global-facts' ? [{
-      id: 'technical-plan-ai',
-      actions: [
-        {
-          id: 'ai-adjust',
-          label: isAiAdjusting ? 'AI调整中' : 'AI调整',
-          icon: <ToolbarSparkleIcon />,
-          variant: 'ai' as const,
-          disabled: aiAdjustDisabled,
-          tooltip: aiAdjustTooltip,
-          onClick: () => { void handleAiAdjustClick(); },
-        },
-      ],
-    }] : []),
     {
       id: 'technical-plan-navigation',
       actions: navigationActions,
@@ -1245,22 +1166,6 @@ function TechnicalPlanHome({ registerLeaveGuard }: TechnicalPlanHomeProps) {
               </div>
         </div>
       </AppDialog>
-
-      <AppDialog
-        open={petInstallDialogOpen}
-        onOpenChange={(open) => !open && !installingPetPlugin && setPetInstallDialogOpen(false)}
-        kicker="AI 调整"
-        title="需要安装桌宠插件"
-        description="AI 调整通过桌宠的 AI 对话完成。当前桌宠插件尚未安装或未启用，是否立即安装并启用？"
-        actions={(
-          <>
-            <button type="button" className="secondary-action" onClick={() => setPetInstallDialogOpen(false)} disabled={installingPetPlugin}>取消</button>
-            <button type="button" className="primary-action" onClick={() => { void installPetPluginAndOpenChat(); }} disabled={installingPetPlugin}>
-              {installingPetPlugin ? '正在安装...' : '安装并启用'}
-            </button>
-          </>
-        )}
-      />
 
       <AppDialog
         open={outlineWordControlLeaveDialogOpen}

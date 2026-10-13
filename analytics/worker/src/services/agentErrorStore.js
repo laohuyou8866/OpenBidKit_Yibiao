@@ -1,4 +1,3 @@
-import { getPublicJwk, verifyPayload } from './licenseCrypto.js';
 import { isValidProjectName, normalizeText, safePage } from '../utils.js';
 
 const DEFAULT_RETENTION_DAYS = 7;
@@ -155,19 +154,6 @@ export async function checkAgentErrorReception(env, projectName, version, compre
     return { accepted: false, reason: 'capacity-exceeded' };
   }
   return { accepted: true, version: normalizedVersion, retentionDays: number(row.retentionDays) || DEFAULT_RETENTION_DAYS };
-}
-
-export async function verifyAgentErrorLicense(env, license, meta) {
-  const payload = license?.payload;
-  const signature = normalizeText(license?.signature, 1000);
-  if (!payload || !signature || !await verifyPayload(getPublicJwk(env), payload, signature)) return false;
-  const expiresAt = new Date(payload.expiresAt || '').getTime();
-  return payload.status === 'active'
-    && payload.sourceTrusted === true
-    && payload.projectName === meta.projectName
-    && payload.clientId === meta.clientId
-    && Number.isFinite(expiresAt)
-    && expiresAt > Date.now();
 }
 
 export function normalizeAgentErrorMeta(input = {}) {

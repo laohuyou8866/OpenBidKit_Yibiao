@@ -1,14 +1,5 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-// 官方账户错误只向页面传递业务原因，不展示 Electron 附加的内部通道名称。
-async function invokeOfficialAccount(action, ...args) {
-  try {
-    return await ipcRenderer.invoke(`official-account:${action}`, ...args);
-  } catch (error) {
-    throw new Error(error.message.replace(/^Error invoking remote method '[^']+': Error:\s*/, ''));
-  }
-}
-
 const bridge = {
   appName: '易标投标工具箱',
   platform: process.platform,
@@ -20,48 +11,7 @@ const bridge = {
   requiredOnlineServices: {
     getStatus: () => ipcRenderer.invoke('required-online-services:get-status'),
   },
-  donation: {
-    getConfig: () => ipcRenderer.invoke('donation:get-config'),
-    createTip: (request) => ipcRenderer.invoke('donation:create-tip', request),
-    getOrderStatus: (merchantOrderNo) => ipcRenderer.invoke('donation:get-order-status', merchantOrderNo),
-    finalizeOrderStatus: (merchantOrderNo) => ipcRenderer.invoke('donation:finalize-order-status', merchantOrderNo),
-    onPrompt: (callback) => {
-      const listener = (_event, payload) => callback(payload);
-      ipcRenderer.on('donation:prompt', listener);
-      return () => ipcRenderer.removeListener('donation:prompt', listener);
-    },
-    onPaid: (callback) => {
-      const listener = () => callback();
-      ipcRenderer.on('donation:paid', listener);
-      return () => ipcRenderer.removeListener('donation:paid', listener);
-    },
-  },
-  getLatestVersion: () => ipcRenderer.invoke('app:get-latest-version'),
-  getUpdateDownloadUrl: () => ipcRenderer.invoke('app:get-update-download-url'),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
-  checkUpdate: () => ipcRenderer.invoke('app:check-update'),
-  startUpdate: () => ipcRenderer.invoke('app:start-update'),
-  quitAndInstall: () => ipcRenderer.invoke('app:quit-and-install'),
-  onUpdateProgress: (callback) => {
-    const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('app:update-progress', listener);
-    return () => ipcRenderer.removeListener('app:update-progress', listener);
-  },
-  onUpdateDownloaded: (callback) => {
-    const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('app:update-downloaded', listener);
-    return () => ipcRenderer.removeListener('app:update-downloaded', listener);
-  },
-  onUpdateError: (callback) => {
-    const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('app:update-error', listener);
-    return () => ipcRenderer.removeListener('app:update-error', listener);
-  },
-  onPluginUpdatesAvailable: (callback) => {
-    const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('plugins:updates-available', listener);
-    return () => ipcRenderer.removeListener('plugins:updates-available', listener);
-  },
   database: {
     getStatus: () => ipcRenderer.invoke('workspace-database:get-status'),
     onStatus: (callback) => {
@@ -80,39 +30,6 @@ const bridge = {
     getModelInfo: (modelName) => ipcRenderer.invoke('config:get-model-info', modelName),
     openConfigFolder: () => ipcRenderer.invoke('config:open-config-folder'),
   },
-  license: {
-    getStatus: () => ipcRenderer.invoke('license:get-status'),
-    refresh: () => ipcRenderer.invoke('license:refresh'),
-    importOfflineFile: () => ipcRenderer.invoke('license:import-offline-file'),
-    activateOfflineCode: (code) => ipcRenderer.invoke('license:activate-offline-code', code),
-  },
-  officialAccount: {
-    redeemCode: (input) => invokeOfficialAccount('redeem-code', input),
-    createInvoiceApplication: (input) => invokeOfficialAccount('create-invoice-application', input),
-    getInvoiceInfo: () => ipcRenderer.invoke('official-account:get-invoice-info'),
-    saveInvoiceInfo: (input) => ipcRenderer.invoke('official-account:save-invoice-info', input),
-    getState: () => invokeOfficialAccount('get-state'),
-    refreshBalance: () => invokeOfficialAccount('refresh-balance'),
-    getRechargeOptions: () => invokeOfficialAccount('get-recharge-options'),
-    createRechargeOrder: (input) => invokeOfficialAccount('create-recharge-order', input),
-    getRechargeOrders: () => invokeOfficialAccount('get-recharge-orders'),
-    getTransactions: (page) => invokeOfficialAccount('get-transactions', page),
-    getRechargeOrder: (id) => invokeOfficialAccount('get-recharge-order', id),
-    closeRechargeOrder: (id) => invokeOfficialAccount('close-recharge-order', id),
-    onRechargeOrderChanged: (callback) => {
-      const listener = (_event, order) => callback(order);
-      ipcRenderer.on('official-account:order', listener);
-      return () => ipcRenderer.removeListener('official-account:order', listener);
-    },
-    sendEmailCode: (input) => invokeOfficialAccount('send-email-code', input),
-    loginWithEmail: (input) => invokeOfficialAccount('login', input),
-    bindEmail: (input) => invokeOfficialAccount('bind-email', input),
-    onStateChanged: (callback) => {
-      const listener = (_event, state) => callback(state);
-      ipcRenderer.on('official-account:state', listener);
-      return () => ipcRenderer.removeListener('official-account:state', listener);
-    },
-  },
   ai: {
     chat: (request) => ipcRenderer.invoke('ai:chat', request),
     requestJson: (request) => ipcRenderer.invoke('ai:request-json', request),
@@ -121,11 +38,6 @@ const bridge = {
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on('ai:http-error', listener);
       return () => ipcRenderer.removeListener('ai:http-error', listener);
-    },
-    onBalanceInsufficient: (callback) => {
-      const listener = () => callback();
-      ipcRenderer.on('ai:balance-insufficient', listener);
-      return () => ipcRenderer.removeListener('ai:balance-insufficient', listener);
     },
   },
   autoConfirmation: {
@@ -301,6 +213,8 @@ const bridge = {
     startBidSectionExtraction: (payload) => ipcRenderer.invoke('tasks:start-bid-section-extraction', payload),
     startBidAnalysis: (payload) => ipcRenderer.invoke('tasks:start-bid-analysis', payload),
     startOutlineGeneration: (payload) => ipcRenderer.invoke('tasks:start-outline-generation', payload),
+    resumeOutlineGeneration: () => ipcRenderer.invoke('tasks:resume-outline-generation'),
+    pauseOutlineGeneration: () => ipcRenderer.invoke('tasks:pause-outline-generation'),
     suppressOutlineSelectionAutoConfirmation: (payload) => ipcRenderer.invoke('tasks:suppress-outline-selection-auto-confirmation', payload),
     startGlobalFactsGeneration: (payload) => ipcRenderer.invoke('tasks:start-global-facts-generation', payload),
     startContentGeneration: (payload) => ipcRenderer.invoke('tasks:start-content-generation', payload),
@@ -334,21 +248,6 @@ const bridge = {
   },
   systemFonts: {
     list: () => ipcRenderer.invoke('system-fonts:list'),
-  },
-  plugins: {
-    getAvailablePlugins: () => ipcRenderer.invoke('plugins:getAvailablePlugins'),
-    install: (pluginId) => ipcRenderer.invoke('plugins:install', pluginId),
-    installOffline: () => ipcRenderer.invoke('plugins:installOffline'),
-    uninstall: (pluginId) => ipcRenderer.invoke('plugins:uninstall', pluginId),
-    enable: (pluginId) => ipcRenderer.invoke('plugins:enable', pluginId),
-    disable: (pluginId) => ipcRenderer.invoke('plugins:disable', pluginId),
-    update: (pluginId) => ipcRenderer.invoke('plugins:update', pluginId),
-    checkUpdates: () => ipcRenderer.invoke('plugins:checkUpdates'),
-    updateAll: () => ipcRenderer.invoke('plugins:updateAll'),
-    openConfig: (pluginId) => ipcRenderer.invoke('plugins:openConfig', pluginId),
-    refreshMarket: () => ipcRenderer.invoke('plugins:refreshMarket'),
-    clearUpdateFailedState: (pluginId) => ipcRenderer.invoke('plugins:clearUpdateFailedState', pluginId),
-    notifyEvent: (pluginId, event, payload) => ipcRenderer.invoke('plugins:notify-event', pluginId, event, payload),
   },
 };
 

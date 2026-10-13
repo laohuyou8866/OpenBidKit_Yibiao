@@ -93,16 +93,6 @@ function copyAiHttpError(source, target) {
   return target;
 }
 
-// 易标官方 API 余额不足使用专用错误码；其他服务商的 402 不按此处理。
-function isOfficialBalanceInsufficient(payload) {
-  try {
-    const error = JSON.parse(String(payload?.body || '')).error;
-    return error?.type === 'yibiao_ai_error' && error.code === 'INSUFFICIENT_BALANCE';
-  } catch {
-    return false;
-  }
-}
-
 function sendToWindows(channel, ...args) {
   const BrowserWindow = getBrowserWindow();
   if (!BrowserWindow?.getAllWindows) return false;
@@ -118,8 +108,6 @@ function sendToWindows(channel, ...args) {
 function emitAiHttpErrorToWindows(errorOrPayload, overrides = {}) {
   const payload = getAiHttpError(errorOrPayload) || errorOrPayload;
   if (!payload?.body && !payload?.status) return false;
-  // 余额不足由主窗口统一跳转到设置并打开充值，所有失败出口共用这一处识别。
-  if (isOfficialBalanceInsufficient(payload)) return sendToWindows('ai:balance-insufficient');
   if (!isAiHttpErrorHtmlPayload(payload)) return false;
 
   return sendToWindows('ai:http-error', {
@@ -134,5 +122,4 @@ module.exports = {
   emitAiHttpErrorToWindows,
   getAiHttpError,
   isAiHttpErrorHtmlPayload,
-  isOfficialBalanceInsufficient,
 };
